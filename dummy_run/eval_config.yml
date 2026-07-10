@@ -1,0 +1,33 @@
+# Evaluate config for the dummy run produced by train_config.yml.
+# Run from repo root (after training + inference):
+#   uv run evaluate --config dummy_run/eval_config.yml
+
+evaluation:
+  metrics:
+    - rmse
+    - mae
+    - mse
+  regions: ["global"]
+  summary_plots: true
+  summary_dir: "./dummy_run/plots/"
+  print_summary: true
+
+default_streams:
+  ERA5:
+    channels: ["2t", "z_500", "t_850"]
+    evaluation:
+      forecast_step: "all"
+      sample: "all"
+    plotting:
+      sample: [0]
+      forecast_step: [0]
+      plot_maps: true
+      plot_histograms: true
+      plot_animations: false
+
+run_ids:
+  dummy1:
+    label: "dummy test run"
+    results_base_dir: "./results/"
+    mini_epoch: 0
+    rank: 0

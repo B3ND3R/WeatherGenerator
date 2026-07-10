@@ -1,0 +1,5 @@
+# Minimal private config. The repo always requires one (see
+# packages/common/src/weathergen/common/config.py::_load_private_conf), but since
+# dummy_run/streams/era5_dummy.yml references its data file directly (a path that
+# exists relative to the repo root), no platform-specific data_paths are needed here.
+data_paths: []
