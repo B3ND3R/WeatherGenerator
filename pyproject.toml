@@ -33,6 +33,8 @@ dependencies = [
  # This seems necessary for build isolation?
  'wheel',
  'setuptools',
+ "mlflow>=3.11.1",
+ "protobuf>=6.33.5",
 ]
 
 
@@ -169,7 +171,7 @@ enable = ["W0201", "W0141"]
 # Also, trying to resolve some permissions issue, see 44.
 # symlink: faster than copy (ex: torch), but leads to files being deleted
 # when the cache is in SCRATCH with a deletion policy.
-link-mode = "symlink"
+link-mode = "hardlink"
 # This guarantees that the build is deterministic and will not be impacted
 # by future releases of dependencies or sub-dependencies.
 # See https://docs.astral.sh/uv/reference/settings/#exclude-newer
