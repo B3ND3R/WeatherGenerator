@@ -1,6 +1,21 @@
 # Evaluate config for the dummy run produced by train_config.yml.
+# See the header of dummy_run/train_config.yml for the full train -> inference
+# -> evaluate command sequence, including the required WEATHERGEN_PRIVATE_*
+# environment variables.
+#
 # Run from repo root (after training + inference):
 #   uv run evaluate --config dummy_run/eval_config.yml
+#
+# Map plots require Cartopy's Natural Earth coastline shapefiles. By default
+# WeatherGenerator blocks auto-downloading these (to avoid slow/flaky network
+# calls on HPC clusters), so the first time you run this on a machine with
+# internet access, warm the cache once with:
+#   uv run python -c "from cartopy.io import shapereader; \
+#     [shapereader.natural_earth(resolution='110m', category=c, name=n) \
+#      for c, names in [('physical', ['coastline','land','ocean','lakes']), \
+#      ('cultural', ['admin_0_countries','admin_0_boundary_lines_land'])] for n in names]"
+# This caches shapefiles under ./assets/cartopy/ (path_shared_working_dir in
+# dummy_run/private_config.yml), reused by every future run.
 
 evaluation:
   metrics:
@@ -20,7 +35,7 @@ default_streams:
       sample: "all"
     plotting:
       sample: [0]
-      forecast_step: [0]
+      forecast_step: "all"
       plot_maps: true
       plot_histograms: true
       plot_animations: false
@@ -28,6 +43,6 @@ default_streams:
 run_ids:
   dummy1:
     label: "dummy test run"
-    results_base_dir: "./results/"
+    results_base_dir: "./results/dummy1/"
     mini_epoch: 0
     rank: 0

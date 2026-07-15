@@ -1,5 +1,17 @@
 # Minimal private config. The repo always requires one (see
 # packages/common/src/weathergen/common/config.py::_load_private_conf), but since
-# dummy_run/streams/era5_dummy.yml references its data file directly (a path that
-# exists relative to the repo root), no platform-specific data_paths are needed here.
+# dummy_run/streams/era5_dummy.yml references its data file with a path relative
+# to the repo root (train/inference/evaluate must be run from there), no
+# platform-specific data_paths are needed here.
+#
+# Note: `_load_private_conf` and `init_loggers` are called without explicitly
+# passing this file's path in some code paths, so both of these environment
+# variables must be set when invoking train/inference/evaluate (see the
+# instructions at the top of dummy_run/train_config.yml):
+#   WEATHERGEN_PRIVATE_REPO_PATH=./dummy_run   (parent of hpc/platform-env.py)
+#   WEATHERGEN_PRIVATE_CONF=./dummy_run/private_config.yml
 data_paths: []
+
+# Working directory used to resolve relative log/result paths when a private
+# config path isn't explicitly threaded through (e.g. init_loggers).
+path_shared_working_dir: "."

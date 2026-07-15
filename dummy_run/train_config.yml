@@ -1,11 +1,35 @@
-# Minimal, fast, CPU-friendly training config for exercising `evaluate` end-to-end
-# with no real data. Based on integration_tests/small1.yml with GPU-only features
-# (flash-attention, FSDP, mixed precision) disabled and dates/sizes adjusted to
-# match the synthetic dataset produced by dummy_run/make_dummy_dataset.py.
+# Minimal, fast, single-GPU training config for exercising `evaluate` end-to-end
+# with no real ERA5 access. Based on integration_tests/small1.yml, sized to fit
+# comfortably on a single 24GB GPU (e.g. NVIDIA A10G) and pointed at a synthetic
+# but structured (not white-noise) 1-degree-resolution dataset produced by
+# dummy_run/make_dummy_dataset.py, so that its shape/density matches real ERA5
+# at 1deg (see config/streams/era5_1deg) and plots look like plausible weather.
+#
+# Requires the GPU extra (flash-attention needs an NVIDIA GPU + CUDA):
+#   uv sync --extra gpu
+#
+# `train`/`inference`/`evaluate` always look up a "private repo" for
+# platform/secrets info (see packages/common/src/weathergen/common/paths.py and
+# dummy_run/hpc/platform-env.py), even when --private-config is passed
+# explicitly, so both of these env vars must be set for every command below:
+#   export WEATHERGEN_PRIVATE_REPO_PATH=./dummy_run
+#   export WEATHERGEN_PRIVATE_CONF=./dummy_run/private_config.yml
 #
 # Run from repo root:
 #   uv run python dummy_run/make_dummy_dataset.py
-#   uv run train --base-config=dummy_run/train_config.yml --run-id dummy1
+#   uv run train --private-config dummy_run/private_config.yml \
+#     --base-config=dummy_run/train_config.yml --run-id dummy1
+#   uv run inference --private-config dummy_run/private_config.yml \
+#     --base-config=dummy_run/train_config.yml --from-run-id dummy1 --mini-epoch 1 --run-id dummy1
+#   uv run evaluate --config dummy_run/eval_config.yml
+#
+# (--mini-epoch: this short run only writes a couple of checkpoints, not a
+# "*_latest.chkpt"; check `ls models/dummy1/` and pick the highest chkpt index.)
+#
+# CPU-only (e.g. on a Mac with no NVIDIA GPU)? Use git history for the older
+# CPU-friendly version of this file (with_flash_attention/with_mixed_precision:
+# False), or override on the command line, e.g.:
+#   uv run train ... --options with_flash_attention=False with_mixed_precision=False
 
 embed_unembed_mode: "block"
 embed_dropout_rate: 0.1
@@ -60,9 +84,10 @@ forecast_att_dense_rate: 1.0
 
 healpix_level: 4
 
-# CPU-friendly: flash-attention / FSDP / bf16 mixed precision need GPU support.
-with_mixed_precision: False
-with_flash_attention: False
+# Single-GPU: mixed precision + flash-attention enabled (needs NVIDIA GPU + CUDA).
+# FSDP is for sharding across multiple GPUs, so it stays off here.
+with_mixed_precision: True
+with_flash_attention: True
 compile_model: False
 with_fsdp: False
 attention_dtype: bf16
@@ -103,10 +128,10 @@ train_logging:
   checkpoint: 250
 
 data_loading :
-  num_workers: 0
+  num_workers: 2
   rng_seed: ???
   repeat_data_in_mini_epoch : False
-  memory_pinning: False
+  memory_pinning: True
 
 training_config:
 

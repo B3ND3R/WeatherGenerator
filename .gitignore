@@ -228,3 +228,6 @@ output
 models
 results
 reports
+
+# cached cartopy Natural Earth shapefiles (downloaded on first map plot)
+assets/cartopy/
