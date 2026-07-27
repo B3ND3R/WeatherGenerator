@@ -228,3 +228,6 @@ output
 models
 results
 reports
+
+# pre-fetched cartopy map assets (symlinked into the shared working dir)
+assets/cartopy/
