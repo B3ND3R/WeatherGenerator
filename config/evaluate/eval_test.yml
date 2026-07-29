@@ -56,17 +56,17 @@ evaluation:
   # regions: ["global", "nhem"] # Have regions here, if you want for them to apply to all streams (scores calculation)
   summary_plots : true
   ratio_plots : false
-  heat_maps : false
+  heat_maps : true
   summary_dir: "./plots/"
   plot_ensemble: "members" #supported: false, "std", "minmax", "members"
-  plot_score_maps: false #plot scores on a 2D maps. it slows down score computation
-  plot_score_animations: false #plot animations of score maps across forecast steps. it slows down score computation
-  plot_score_init_timeseries: true #plot timeseries of scores across forecast steps. 
-  print_summary: false #print out score values on screen. it can be verbose
+  plot_score_maps: true #plot scores on a 2D maps. it slows down score computation
+  plot_score_animations: true #plot animations of score maps across forecast steps. it slows down score computation
+  plot_score_init_timeseries: true #plot timeseries of scores across forecast steps.
+  print_summary: true #print out score values on screen. it can be verbose
   log_scale: false
   add_grid: false
-  score_cards: false
-  bar_plots: false
+  score_cards: true
+  bar_plots: true
   # baseline: "ar40mckx"
 
 
@@ -75,15 +75,15 @@ default_streams:
     #offset: "1h" #optional: specify a timedelta offset to infer init_time when source_interval is missing. Format examples: "1h", "30m", "2h30m".
     regions: ["global"]
     channels: ["2t", "10u"] #, "10v", "z_500", "t_850", "u_850", "v_850", "q_850", ]
-    regrid: True 
-      # target_grid: [1.5, 1.5] #default is [1.5, 1.5], e.g. ["O96"]
+    regrid: False
+    #  original_grid: [1.0, 1.0] #default is [1.5, 1.5], e.g. ["O96"]
     evaluation:
       forecast_step: "all"
       sample: "all"
       ensemble: "all" #supported: "all", "mean", [0,1,2]
     plotting:
-      sample: [1, 3]
-      forecast_step: [1,3, 2] #supported: "all", [1,2,3,...], "1-50" (equivalent of [1,2,3,...50])
+      sample: [0, 10, 20] #representative subset across the daily-init range; scoring above stays "all"
+      forecast_step: [1, 4, 8, 12, 16] #every 24h out to the 96h horizon (6h steps); supports "all", [1,2,3,...], "1-50"
       ensemble: [0,2,5] #supported: "all", "mean", [0,1,2]
       plot_maps: true
       plot_bias: false
@@ -93,9 +93,9 @@ default_streams:
       plot_timeseries: false
 
 run_ids :
-  d9tj8gw2:
-    label: "pretrained model d9tj8gw2"
-    results_base_dir : "/home/sagemaker-user/data/sample_data/WeGen_sample_output"
+  era5_1deg_daily96h:
+    label: "8layer, 1deg, 2020, daily 00Z init, 96h horizon"
+    # results_base_dir : "/home/sagemaker-user/weathergen_shared/results/8layer_1deg_2020"
     #NEW: if "streams" is not specified, the default streams are used
     
   
