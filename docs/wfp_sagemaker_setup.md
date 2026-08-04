@@ -119,6 +119,59 @@ better long-term fix is to clone it as a sibling of this repo
 `packages/evaluate/README.md` for a link to the private wiki with fuller
 workflow docs.
 
+## 3. `Unexpected bus error encountered in worker` with `data_loading.num_workers > 0`
+
+**Symptom:** running `inference` (e.g. via `scripts/inference_1deg.sh`) with
+`data_loading.num_workers` set above `0` fails on the first batch with:
+```
+ERROR: Unexpected bus error encountered in worker. This might be caused by insufficient shared memory (shm)
+```
+This happens even with only a handful of workers and plenty of free GPU/system
+memory, and is independent of worker count. It is **not** actual `/dev/shm`
+exhaustion — on this box `/dev/shm` has ~3.95GB capacity with <1% used and no
+cgroup memory limit. PyTorch emits this exact message for *any* abnormal
+worker-process death signal, not just literal shm exhaustion, so it's
+misleading here.
+
+**Cause:** a classic "fork after starting threads" hazard between
+`torch.multiprocessing`'s `"fork"` start method
+(`torch.multiprocessing.set_start_method("fork", ...)` in
+`src/weathergen/train/trainer_base.py:44`, via `Trainer.init_torch()`) and
+`numcodecs`' blosc codec:
+
+- `numcodecs/__init__.py` calls `blosc._init()` /
+  `blosc.set_nthreads(min(8, cpu_count()))` **unconditionally at import
+  time**, spinning up blosc's internal C pthread pool (up to 8 threads) the
+  moment `weathergen.datasets` (→ `anemoi.datasets` → `zarr` → `numcodecs`)
+  gets imported. This pool has no `os.register_at_fork` handler (unlike
+  zarr's own `ThreadPoolExecutor`, which does register one in
+  `zarr/core/sync.py`).
+- `Trainer.inference()` constructs the dataset (`MultiStreamDataSampler` →
+  `DataReaderAnemoi`, `src/weathergen/datasets/data_reader_anemoi.py:38-170`)
+  in the main process, which does real zarr reads (dates, lat/lon,
+  variables, normalization stats) that exercise blosc's multi-threaded pool
+  — all before any fork.
+- The actual fork happens later, when the `DataLoader` is first iterated
+  (`iter(self.data_loader_validation)` in `Trainer.validate()`,
+  `src/weathergen/train/trainer.py:581`). Forked worker processes inherit
+  blosc's pthread/mutex bookkeeping but not the actual worker pthreads
+  (`fork()` only clones the calling thread), so the first decompression call
+  in a worker deadlocks on now-orphaned pthread state, surfacing as a bus
+  error.
+
+Versions in use: `zarr==3.1.6`, `numcodecs==0.16.5`.
+
+**Fix (not yet applied — planned for later):** force blosc to run
+single-threaded before the fork ever happens, so there's no multi-threaded
+pool state to become invalid across `fork()`. Concretely: call
+`numcodecs.blosc.set_nthreads(1)` in `TrainerBase.init_torch()`
+(`src/weathergen/train/trainer_base.py`), right after
+`torch.multiprocessing.set_start_method(...)`, guarded on
+`multiprocessing_method == "fork"`. Once in place, `data_loading.num_workers`
+in `scripts/inference_1deg.sh` / `scripts/inference_1deg_daily_loop.sh` can be
+raised above `0` again (both currently hardcode `0` as a workaround for this
+crash).
+
 ## After both fixes
 
 `uv run evaluate --config config/evaluate/eval_test.yml` runs the full pipeline

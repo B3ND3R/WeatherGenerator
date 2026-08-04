@@ -57,7 +57,7 @@ evaluation:
   summary_plots : true
   ratio_plots : false
   heat_maps : true
-  summary_dir: "./plots/"
+  summary_dir: "./plots_agg_sample/"
   plot_ensemble: "members" #supported: false, "std", "minmax", "members"
   plot_score_maps: true #plot scores on a 2D maps. it slows down score computation
   plot_score_animations: true #plot animations of score maps across forecast steps. it slows down score computation
@@ -97,6 +97,8 @@ run_ids :
     label: "8layer, 1deg, 2020, daily 00Z init, 96h horizon"
     # results_base_dir : "/home/sagemaker-user/weathergen_shared/results/8layer_1deg_2020"
     #NEW: if "streams" is not specified, the default streams are used
+    agg_dims: sample #average scores across the sample (forecast init) dimension
+    metrics_dir: "/home/sagemaker-user/weathergen_shared/results/era5_1deg_daily96h/evaluation_agg_sample"
     
   
   

@@ -3,7 +3,7 @@
 export WEATHERGEN_PRIVATE_REPO_PATH=/home/sagemaker-user/weathergen_shared
 export WEATHERGEN_PRIVATE_CONF=/home/sagemaker-user/.weathergen_private_conf.yml
 
-RUN_ID=era5_1deg_daily96h
+RUN_ID=era5_1deg_daily96h_agg
 
 uv run --directory /home/sagemaker-user/git/WeatherGenerator python scripts/monitor_resources.py \
   --interval 2 \
@@ -13,7 +13,8 @@ uv run --directory /home/sagemaker-user/git/WeatherGenerator python scripts/moni
     --base-config=config/config_era5_2020_smoke.yml --from-run-id 8level_1deg_2020_smoke2 \
     --run-id "$RUN_ID" \
     --options \
-      test_config.time_window_step=24:00:00 \
+      test_config.start_date=2020-12-02T00:00 \
+      test_config.end_date=2020-12-12T00:00 \
       test_config.forecast.num_steps=16 \
       test_config.samples_per_mini_epoch=60 \
       data_loading.num_workers=0 \
