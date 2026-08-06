@@ -172,6 +172,54 @@ in `scripts/inference_1deg.sh` / `scripts/inference_1deg_daily_loop.sh` can be
 raised above `0` again (both currently hardcode `0` as a workaround for this
 crash).
 
+## 4. Score-map/GIF and per-init-hour timeseries silently come up empty when metric caches are out of sync
+
+**Symptom:** running `evaluate` with `score_plots: [score_map, score_animation, timeseries, ...]`
+(or the legacy `plot_score_maps`/`plot_score_animations`/`plot_score_init_timeseries` flags)
+produces an empty `<run>/plots/<stream>/score_maps/` directory (no PNGs, no GIF) and no
+`score_init_time_series/` directory at all — even though the regular summary plots (`lead_time`,
+`heatmap`, `bar`, `scorecard`) render fine for the same metrics.
+
+**Cause:** `_process_stream()` in
+`packages/evaluate/src/weathergen/evaluate/run_evaluation.py:182-306` decides which metrics to pass
+to `run_score_map_pipeline()`/`run_score_timeseries_pipeline()` based on
+`reader.load_scores()` (`io/wegen_reader.py:192-239`), which returns `recomputable_metrics` — the
+subset of requested metrics whose cached JSON score (`<metrics_dir>/<run_id>_<stream>_<region>_<metric>_chkpt*.json`)
+is missing, stale (`eval_settings` mismatch), or doesn't have a matching `attrs`/parameter version
+cached yet (`io/wegen_reader.py:241-291`).
+
+If **any** requested metric needs recomputing while others are already fully cached,
+`_process_stream` takes this branch:
+```python
+if recomputable_metrics:
+    metrics_to_compute = recomputable_metrics   # only the stale/missing metric(s)
+    regions_to_compute = list(set(recomputable_metrics.keys()))
+elif plot_score_maps or plot_score_init_time_series:
+    metrics_to_compute = {r: metrics for r in regions}   # the full set — only reached if NOTHING needs recomputing
+    ...
+```
+So the score-map and per-init-timeseries pipelines get scoped to **only the metric(s) that needed
+recomputing**, silently dropping every already-cached metric from those two outputs for that run —
+even though the regular summary plots are unaffected (they read from the merged
+`stream_loaded_scores` cache directly, not from this narrowed set).
+
+We hit this because `psd` (in `evaluation.metrics`, used for spectral diagnostics) needed
+recomputing (its cached `attrs` didn't match the current `psd_method` parameter) while `rmse`/`mae`
+were still validly cached from an earlier run. That silently starved `rmse`/`mae` of score-map/GIF
+and per-init-timeseries output on that run. On top of that, `psd` **also produces zero files by
+itself** in the score-map pipeline — a power spectral density isn't a 2D lat/lon field, so it can't
+render as a spatial map/GIF at all (the per-init-timeseries pipeline already knows this and
+explicitly excludes it: `region_metrics.pop("psd", None)` in
+`plotting/plot_orchestration.py:137`; the score-map pipeline has no equivalent guard).
+
+**Fix:** don't mix `psd` (or any metric that can't produce a 2D score map) into the same
+`evaluation.metrics` list as `score_map`/`score_animation`/`timeseries` outputs you actually want —
+score it in a separate config/run instead. More generally: if score-map/GIF/per-init-timeseries
+output for a metric comes up empty, check whether every metric in `evaluation.metrics` has a fully
+warm, matching cache entry (compare the JSON files' mtimes under `<results>/evaluation/`) — a
+partial cache miss on an unrelated metric will silently suppress these outputs for the metrics you
+do care about.
+
 ## After both fixes
 
 `uv run evaluate --config config/evaluate/eval_test.yml` runs the full pipeline
