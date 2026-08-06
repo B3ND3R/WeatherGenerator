@@ -738,6 +738,7 @@ Predefined bounding boxes `(lat_min, lat_max, lon_min, lon_max)`:
 | `uwc-west` | 39 to 63 | −26 to 41 | UWC-West domain |
 | `arome` | 37 to 56 | −12 to 16 | AROME domain |
 | `icon` | 42 to 51 | −1 to 18 | ICON domain |
+| `mozambique` | −27 to −10 | 30 to 41 | |
 
 Regions are specified as lists of strings. They can appear in three places:
 

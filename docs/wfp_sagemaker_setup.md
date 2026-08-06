@@ -220,6 +220,70 @@ warm, matching cache entry (compare the JSON files' mtimes under `<results>/eval
 partial cache miss on an unrelated metric will silently suppress these outputs for the metrics you
 do care about.
 
+## 5. `cartopy.io.DownloadWarning` crashes plotting for regional evaluation configs (e.g. `mozambique`)
+
+**Symptom:** `evaluate` crashes while rendering scatter/map plots with:
+```
+cartopy.io.DownloadWarning: Downloading: https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_coastline.zip
+```
+raised inside a joblib worker (`plotter.py::scatter_plot` → `plt.savefig`) and re-raised
+fatally by `dispatch_parallel`. Only happens for regions with a small bounding box (e.g.
+`mozambique`, `belgium`, `arome`, `icon` — see
+`packages/evaluate/src/weathergen/evaluate/utils/regions.py`); global/large-region plots
+are unaffected.
+
+**Cause:** Several things combine:
+
+- `Plotter.__init__` (`packages/evaluate/src/weathergen/evaluate/plotting/plotter.py:145`)
+  unconditionally calls `_download_cartopy_off(enabled=True)`, which does
+  `warnings.filterwarnings("error", category=DownloadWarning)` (line 60) — turning any
+  Cartopy download attempt into a hard error instead of an actual download. This is
+  intentional (local-cache-only plotting), but there's no local fallback in place for
+  every resolution.
+- `ax.coastlines(linewidth=0.3)` (`plotter.py:1008`) uses the default `resolution='auto'`.
+  Cartopy's auto-scaler picks shapefile resolution from map extent: small bounding boxes
+  like `mozambique` (`regions.py:43`, `(-27, -10, 30, 41)`) resolve to `10m`, while
+  large/global extents resolve to `50m`/`110m`.
+- The Cartopy data dir is `<path_shared_working_dir>/assets/cartopy` (`plotter.py:46`),
+  set up per fix #2 above — in this environment that's
+  `/home/sagemaker-user/weathergen_shared/assets/cartopy`. The repo ships a pre-fetched
+  cache at `WeatherGenerator/assets/cartopy/shapefiles/natural_earth/{physical,cultural}/`
+  (the `.gitignore` comment there says "pre-fetched cartopy map assets (symlinked into
+  the shared working dir)"), symlinked in via
+  `weathergen_shared/assets/cartopy -> .../WeatherGenerator/assets/cartopy`. But that
+  repo cache only ever contained `110m` shapefiles — no `50m`/`10m` — so any region small
+  enough to trigger the auto-scaler's `10m` pick has nothing local to fall back to.
+- The try/except around `ax.coastlines()` (`plotter.py:1007-1010`) doesn't help — Cartopy
+  loads shapefiles lazily at draw time, so the actual failure happens later, unguarded,
+  inside `plt.savefig` (`plotter.py:1095`).
+
+Note this is **not** a network-egress problem — `naturalearth.s3.amazonaws.com` is
+directly reachable from this SageMaker environment via plain `curl`/`wget`. It's
+specifically the `_download_cartopy_off` warnings-as-errors policy that blocks Cartopy's
+own downloader.
+
+**Fix:** Pre-populate the missing resolution(s) directly with `curl`/`unzip` instead of
+letting Cartopy try to download them itself. Only `coastline` is needed — nothing in the
+`evaluate` plotting path calls `cfeature.LAND`/`OCEAN`/etc., just `ax.coastlines()`:
+```bash
+dir=/home/sagemaker-user/git/WeatherGenerator/assets/cartopy/shapefiles/natural_earth/physical
+mkdir -p "$dir"
+for res in 10m 50m; do
+  curl -sL "https://naturalearth.s3.amazonaws.com/${res}_physical/ne_${res}_coastline.zip" -o /tmp/ne_${res}_coastline.zip
+  unzip -o -q /tmp/ne_${res}_coastline.zip -d "$dir"
+  rm /tmp/ne_${res}_coastline.zip
+done
+```
+(Write into the repo's `assets/cartopy/` path, not directly into
+`weathergen_shared/assets/cartopy/` — the latter is just a symlink to the former, per fix
+above. If a fresh environment doesn't have that symlink yet, recreate it first:
+`ln -s /home/sagemaker-user/git/WeatherGenerator/assets/cartopy /home/sagemaker-user/weathergen_shared/assets/cartopy`.)
+
+If some other plot later starts using a different Cartopy feature (e.g. `LAND`, `OCEAN`,
+`BORDERS`) and hits the same `DownloadWarning`, fetch that `name` at the needed
+resolution(s) the same way — swap `coastline` for the feature's Natural Earth name (e.g.
+`land`, `ocean`, `admin_0_countries`) and `physical` for `cultural` where applicable.
+
 ## After both fixes
 
 `uv run evaluate --config config/evaluate/eval_test.yml` runs the full pipeline

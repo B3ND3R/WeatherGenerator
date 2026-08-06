@@ -14,6 +14,7 @@ evaluation:
   # NB: don't add psd (or any non-2D-map metric) here alongside score_map/score_animation/
   # timeseries below -- see docs/wfp_sagemaker_setup.md #4 for why that silently breaks those
   # outputs for rmse/mae whenever psd's cache goes stale relative to theirs.
+  regions: ["global", "mozambique"]
   metrics:
   - rmse
   - mae
@@ -41,7 +42,7 @@ evaluation:
 default_streams:
   ERA5:
     #offset: "1h" #optional: specify a timedelta offset to infer init_time when source_interval is missing. Format examples: "1h", "30m", "2h30m".
-    regions: ["global"]
+    regions: ["global", "mozambique"]
     channels: ["2t", "10u"] #, "10v", "z_500", "t_850", "u_850", "v_850", "q_850", ]
     regrid: False
     #  original_grid: [1.0, 1.0] #default is [1.5, 1.5], e.g. ["O96"]
