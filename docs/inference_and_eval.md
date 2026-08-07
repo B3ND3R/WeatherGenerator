@@ -350,6 +350,83 @@ are flushed after every sample, not just at the end).
 
 ---
 
+## 11. Benchmarking against IFS/AIFS forecasts as pseudo run_ids
+
+Investigated after wanting `config/evaluate/eval_test.yml` to show `era5_1deg_daily96h`
+alongside ECMWF's own operational IFS/AIFS forecasts for the same period, without building a
+full pipeline by hand.
+
+### What actually works today, with zero repo code changes
+
+The eval framework's `type:` field on a `run_ids` entry already supports plugging in a model
+that isn't a WeatherGenerator run at all, as long as its scores are pre-computed and written to
+CSV in the Quaver column convention `CsvReader` expects (`packages/evaluate/src/weathergen/
+evaluate/io/csv_reader.py`, format documented in `docs/evaluate_config_reference.md` §11):
+`parameter,level,number,score,step,date,domain_name,value`, one file per metric under
+`<metrics_dir>/<run_id>/`. `config/evaluate/eval_config.yml:225-249` already has live examples
+of exactly this for `pangu` (Pangu-Weather) and `graphcast`.
+
+So the practical path is: pull IFS/AIFS forecasts and score them against ERA5 truth in a
+**standalone script, outside `evaluate` entirely** (e.g. via `earthkit-data`'s
+`"ecmwf-open-data"` source — already a project dependency, see `packages/evaluate/pyproject.
+toml`), write the results as CSVs in the format above, then add a `type: "csv"` run_ids entry
+pointing at them — identical to `pangu`/`graphcast`. No new Reader class, no dependency changes,
+no dispatch changes in `run_evaluation.py`.
+
+**Caveat found while checking this**: `CsvReader.__init__` (`csv_reader.py:73-80`) always builds
+the channel key as `<parameter>_<level>` and drops any row with a null `level`
+(`dropna(subset=["step", "level"])`) — there's no code path that produces a bare channel name
+without a level suffix. This works cleanly for pressure-level channels (`z_500`, `t_850`, ...,
+matching WeatherGenerator's own naming), but **surface channels (`2t`, `10u`) can't be
+represented as-is** — whatever `level` value you write, the resulting channel key (e.g. `2t_0`)
+won't match the plain `"2t"` in the eval config's `channels:` list, so those rows are silently
+dropped and the channel shows up as missing/NaN rather than erroring. If a surface-channel
+comparison matters, either restrict the benchmark run_ids to pressure-level channels only, or
+special-case `level is null → channel = parameter` in `CsvReader` (small, self-contained change).
+
+Also note: like the other non-`"zarr"` reader types, `csv` is score-only — `score_map`/
+`score_animation` (spatial maps/animations) won't be produced for these pseudo run_ids, only the
+score-vs-lead-time/timeseries/heatmap/scorecard/bar plots. This matches what's wanted for a
+benchmark comparison.
+
+### Backlog: live-pulling reader (`type: "ecmwf_opendata"`)
+
+A fancier option was designed but **not implemented** — a first-class reader type that pulls
+IFS/AIFS fields from ECMWF's open-data feed and scores them on the fly inside `evaluate` itself
+(rather than via an offline script + CSV), so re-running `evaluate` automatically picks up new
+init times without a separate manual step. Sketch, if ever revisited:
+
+- New reader `EcmwfOpenDataReader(Reader)`, registered as `type: "ecmwf_opendata"` in
+  `get_reader()` (`run_evaluation.py:158-180`), score-only like `CsvReader` (no maps/animations).
+- A `target_run_id` config key names an existing `type: "zarr"` run_id (e.g.
+  `era5_1deg_daily96h`) to borrow ERA5 truth + grid + forecast_steps/samples from — necessary
+  because `WeatherGenZarrReader` only reads truth pre-baked into a real inference run's own
+  results zarr (`io_orchestration.py`/`io_workers.py:139-268`), there's no standalone in-repo way
+  to open raw ERA5 by (channel, datetime). Internally instantiate a second
+  `WeatherGenZarrReader(self.eval_cfg, target_run_id, self.private_paths)`, same pattern
+  `WeatherGenMergeReader` already uses (`io/merge_reader.py:56-79`).
+- Pull via `earthkit.data.from_source("ecmwf-open-data", model="ifs"|"aifs", ...)` (needs the
+  separate `ecmwf-opendata` PyPI client added as a dependency — not installed today), map
+  WeatherGenerator channel names to ECMWF request params via the existing
+  `config/evaluate/config_zarr2cf.yaml` table, regrid onto the target run's `ipoint` lat/lon
+  with `scipy.interpolate.RegularGridInterpolator` (already a direct dependency, no new
+  regridding dep needed), score with the framework's own `get_score()`
+  (`evaluate/scores/score.py:123-169`) instead of reimplementing rmse/mae.
+- Two-layer disk cache: raw pulled+regridded fields (keyed by run_id/init_time/channel/step, so
+  repeat `evaluate` runs don't re-hit ECMWF's server) and the usual score JSON cache
+  (`<metrics_dir>/<run_id>_<stream>_<region>_<metric>_chkpt00000.json`, same convention as the
+  other reader types).
+- **Hard constraint regardless of implementation**: ECMWF's free open-data feed only retains a
+  rolling ~4-day window, so this only ever works against *recent* inference runs, never the
+  original 2020 smoke-test period — `era5_1deg_daily96h` (or whichever run_id is used as
+  `target_run_id`) would need to be re-run against current dates for a live comparison to have
+  anything to align against.
+
+Full design detail (regridding/caching specifics, exact file layout) was written up but not
+committed to code; revisit if the CSV-based route above turns out to be too manual in practice.
+
+---
+
 ## Current setup in this repo
 
 - `scripts/inference_1deg.sh`: loads `8level_1deg_2020_smoke2`, writes output to
