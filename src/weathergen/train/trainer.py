@@ -365,13 +365,19 @@ class Trainer(TrainerBase):
 
         # recover mini_epoch when continuing run
         if self.world_size_original is None:
+            # TODO: known separate inconsistency -- len(self.data_loader) is the length of the
+            # full dataset, not a mini-epoch's worth of batches, so this branch likely
+            # under/over-counts too. Only hit for checkpoints that predate world_size_original.
             mini_epoch_base = int(self.cf.general.istep / len(self.data_loader))
         else:
             len_per_rank = (
                 max(1, len(self.dataset) // (self.world_size_original * self.batch_size_per_gpu))
             ) * self.batch_size_per_gpu
+            # istep counts batches (of batch_size_per_gpu samples each), while
+            # samples_per_mini_epoch/len_per_rank count samples -- multiply istep by
+            # batch_size_per_gpu first so both sides of the division are in sample units.
             mini_epoch_base = int(
-                self.cf.general.istep
+                (self.cf.general.istep * self.batch_size_per_gpu)
                 / (
                     min(len_per_rank, self.training_cfg.samples_per_mini_epoch)
                     * self.world_size_original
