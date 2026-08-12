@@ -1,0 +1,214 @@
+# Full-year training config against the custom ERA5 2020 zarr
+# (config/streams/era5_2020_smoke/era5.yml), using all 48 dynamic channels.
+# Originally started as a smoke-test config; model size/mini-epoch/sample counts
+# below are still the smoke-test defaults and likely want increasing for a real run.
+#
+# Run from repo root:
+#   uv run train --base-config=config/config_era5_2020_smoke.yml --run-id <your-run-id>
+
+embed_unembed_mode: "block"
+embed_dropout_rate: 0.1
+
+ae_local_dim_embed: 256
+ae_local_num_blocks: 2
+ae_local_num_heads: 16
+ae_local_dropout_rate: 0.1
+ae_local_with_qk_lnorm: True
+
+ae_local_num_queries: 1
+ae_local_queries_per_cell: False
+ae_adapter_num_heads: 16
+ae_adapter_embed: 128
+ae_adapter_with_qk_lnorm: True
+ae_adapter_with_residual: True
+ae_adapter_dropout_rate: 0.1
+
+ae_global_dim_embed: 256
+ae_global_num_blocks: 2
+ae_global_num_heads: 32
+ae_global_dropout_rate: 0.1
+ae_global_with_qk_lnorm: True
+ae_global_att_dense_rate: 1.0
+ae_global_block_factor: 64
+ae_global_mlp_hidden_factor: 2
+ae_global_trailing_layer_norm: False
+
+ae_aggregation_num_blocks: 2
+ae_aggregation_num_heads: 32
+ae_aggregation_dropout_rate: 0.1
+ae_aggregation_with_qk_lnorm: True
+ae_aggregation_att_dense_rate: 1.0
+ae_aggregation_block_factor: 64
+ae_aggregation_mlp_hidden_factor: 2
+
+decoder_type: PerceiverIOCoordConditioning
+pred_adapter_kv: False
+pred_self_attention: True
+pred_dyadic_dims: False
+pred_mlp_adaln: True
+num_class_tokens: 1
+num_register_tokens: 7
+
+fe_num_blocks: 2
+fe_num_heads: 16
+fe_dropout_rate: 0.1
+fe_with_qk_lnorm: True
+fe_layer_norm_after_blocks: []
+fe_impute_latent_noise_std: 0.0
+forecast_att_dense_rate: 1.0
+
+healpix_level: 4
+
+# Default (64) sizes model.py's pe_embed positional-encoding table and was tuned for
+# the original 6-channel smoke-test stream at batch size 1. With all 48 channels and
+# batch_size (model_input.forecasting.num_samples) = 2, observed worst-case per-cell
+# token count is 104; 128 gives headroom. Raise this again if num_samples increases.
+ae_local_max_tokens_per_cell: 128
+
+# Flash attention and mixed precision are both required unconditionally by
+# this codebase (see src/weathergen/model/attention.py and run_train.py),
+# so they must stay on even for a smoke test. Compile/FSDP kept off to
+# isolate issues one at a time.
+with_mixed_precision: True
+with_flash_attention: True
+compile_model: False
+with_fsdp: False
+attention_dtype: bf16
+mixed_precision_dtype: bf16
+mlp_norm_eps: 1e-5
+norm_eps: 1e-4
+
+latent_noise_kl_weight: 0.0
+latent_noise_gamma: 2.0
+latent_noise_saturate_encodings: 5
+latent_noise_use_additive_noise: False
+latent_noise_deterministic_latents: True
+
+freeze_modules: ""
+
+norm_type: "LayerNorm"
+
+zarr_store: "zip"
+
+################
+
+streams_directory: "./config/streams/era5_o96_daily/"
+model_path: "./models"
+results_path: "./results"
+
+general:
+  istep: 0
+  rank: ???
+  world_size: ???
+  multiprocessing_method: "fork"
+  desc: ""
+  run_id: ???
+  run_history: []
+
+train_logging:
+  terminal: 1
+  metrics: 20
+  checkpoint: 20
+
+data_loading :
+  num_workers: 4
+  rng_seed: ???
+  repeat_data_in_mini_epoch : False
+  memory_pinning: False
+
+training_config:
+
+  training_mode: ["masking"]
+
+  num_mini_epochs: 100
+  samples_per_mini_epoch: 72
+  shuffle: True
+
+  start_date: 2021-01-01T00:00
+  end_date: 2021-12-31T00:00
+
+  time_window_step: 24:00:00
+  time_window_len: 24:00:00
+
+  window_offset_prediction : 1
+
+  learning_rate_scheduling :
+    lr_start: 1e-6
+    lr_max: 0.00005
+    lr_final_decay: 1e-6
+    lr_final: 0.0
+    num_steps_warmup: 2
+    num_steps_cooldown: 2
+    policy_warmup: "cosine"
+    policy_decay: "constant"
+    policy_cooldown: "linear"
+    parallel_scaling_policy: "sqrt"
+
+  optimizer:
+    grad_clip: 1.0
+    weight_decay: 0.1
+    log_grad_norms: False
+    adamw :
+      beta1 : 0.975
+      beta2 : 0.9875
+      eps : 2e-08
+
+  losses : {
+    "physical": {
+        type: LossPhysical,
+        loss_fcts: { "mse": { }, },
+        },
+    }
+
+  model_input: {
+    "forecasting" : {
+      masking_strategy: "forecast",
+      num_samples: 3,
+    }
+  }
+
+  forecast :
+      time_step: 24:00:00
+      num_steps: 2
+      policy: "fixed"
+      offset: 1
+
+
+validation_config:
+
+  samples_per_mini_epoch: 24
+  shuffle: False
+
+  start_date: 2022-01-01T00:00
+  end_date: 2022-12-31T00:00
+
+  # shuffle: False walks sequentially from start_date at this stride, with no month
+  # awareness -- default (inherited 1-day) stride would put all 24 samples in January.
+  # ~15.2 days spreads the 24 samples roughly twice a month across the year instead.
+  time_window_step: 365:00:00
+
+  output:
+    streams: ["ERA5"]
+
+  validate_with_ema:
+    enabled : True
+    ema_ramp_up_ratio: 0.09
+    ema_halflife_in_thousands: 1e-3
+
+test_config:
+  # No time_window_step here -- inherits validation_config's 365:00:00 stride
+  # (test_cfg = merge(validation_cfg, test_config)), giving the same ~twice-a-month spread.
+  start_date: 2023-01-01T00:00
+  end_date: 2023-12-31T00:00
+  output:
+    num_samples: 24
+
+inference_config:
+  output:
+    streams: ["ERA5"]
+
+wgtags:
+  org: null
+  issue: null
+  exp: null
+  grid: null
