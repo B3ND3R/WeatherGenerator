@@ -31,7 +31,7 @@ evaluation:
   # cwd-relative ./plots/ folder (which any evaluate invocation from the repo root writes into,
   # mixing output from every run_id you've ever evaluated). Matches where the per-sample/
   # score-map output already lands via runplot_dir.
-  summary_dir: "/home/sagemaker-user/weathergen_shared/results/era5_1deg_daily96h/plots/"
+  summary_dir: "/home/sagemaker-user/weathergen_shared/results/8level_o96_daily/plots/"
   plot_ensemble: "members" #supported: false, "std", "minmax", "members"
   print_summary: true #print out score values on screen. it can be verbose
   log_scale: false
@@ -43,7 +43,7 @@ default_streams:
   ERA5:
     #offset: "1h" #optional: specify a timedelta offset to infer init_time when source_interval is missing. Format examples: "1h", "30m", "2h30m".
     regions: ["global", "mozambique"]
-    channels: ["2t", "10u"] #, "10v", "z_500", "t_850", "u_850", "v_850", "q_850", ]
+    channels: ["2t", "10u", "10v", "z_600", "t_750", "u_750", "v_750", "q_750", "tp"]
     regrid: False
     #  original_grid: [1.0, 1.0] #default is [1.5, 1.5], e.g. ["O96"]
     evaluation:
@@ -51,8 +51,8 @@ default_streams:
       sample: "all"          # score every forecast (needed to average over "all forecasts")
       ensemble: "all" #supported: "all", "mean", [0,1,2]
     plotting:
-      sample: [0, 2, 4, 6]               # one sample from each init hour: 0->06Z, 2->12Z, 4->18Z, 6->00Z
-      forecast_step: [1, 4, 8, 12, 16]  # every 24h out to the 96h horizon (6h steps)
+      sample: [0, 15, 31, 47]               # one sample from each init hour: 0->06Z, 2->12Z, 4->18Z, 6->00Z
+      forecast_step: "all"  # every 24h out to the 96h horizon (6h steps)
       ensemble: "all" #supported: "all", "mean", [0,1,2]
       # ── Data visualisations (new list-based config) ──
       # per-sample maps/bias/histograms/animations -- separate from the score plots above,
@@ -60,7 +60,7 @@ default_streams:
       data_plots: [maps, bias, histograms, animations, timeseries]
 
 run_ids :
-  era5_1deg_daily96h:
-    label: "8layer, 1deg, 2020, 6-hourly init (00/06/12/18Z), 96h horizon"
+  8level_o96_daily:
+    label: "8layer, o96-grid, daily"
     # results_base_dir : "/home/sagemaker-user/weathergen_shared/results/8layer_1deg_2020"
     #NEW: if "streams" is not specified, the default streams are used

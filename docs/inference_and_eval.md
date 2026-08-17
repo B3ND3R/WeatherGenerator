@@ -427,6 +427,68 @@ committed to code; revisit if the CSV-based route above turns out to be too manu
 
 ---
 
+## 12. Known issue: `time_window_step > forecast.time_step` can crash `evaluate`'s heatmap plot
+
+Hit while evaluating an `o96_daily` config (`config/config_era5_o96_daily.yml`) with
+`forecast_step: "all"` and the `heatmap` score plot enabled. `evaluate` fails partway through
+with:
+
+```
+pandas.errors.InvalidIndexError: Reindexing only valid with uniquely valued Index objects
+```
+
+raised from `.sel({x_dim: time_steps})` in `heat_map()`
+(`packages/evaluate/src/weathergen/evaluate/plotting/line_plots.py:696`). The proximate cause is
+a duplicate value in the `lead_time` coordinate of the scored data — `.sel()` needs that axis to
+be unique and refuses once it isn't.
+
+**Relationship to the truncation already noted in §5:** §5 flags that `_calc_baseperms` computes
+a margin using integer division that floors to zero once `time_window_step > forecast.time_step`,
+but concludes that specific truncation is harmless because `self.len` (from `check_samples()`)
+never indexes far enough into it to matter. This is the *same style* of floor-to-zero arithmetic
+in a *different* place — `step_forecast_dt = idx + (time_step * timestep_idx) // step_timedelta`
+in `multi_stream_data_sampler.py:460`, where `step_timedelta` is `time_window_step` — but here it
+governs which target window each forecast step is assigned to, not sample-count margins. This one
+does appear to get hit in practice.
+
+**Mechanism, traced through the code (not yet confirmed with a debugger/breakpoint — worth
+verifying directly if this resurfaces):**
+
+- The run's `test_config` didn't override `time_window_step`, so it inherited
+  `validation_config.time_window_step: 365:00:00` (set deliberately large so test samples spread
+  across the year instead of clustering — see the config's own comment on that key).
+- `forecast.time_step` was `24:00:00`. Since `24h * timestep_idx` stays far below `365h` for any
+  realistic step index, `step_forecast_dt` in `multi_stream_data_sampler.py:460` floors to `0` for
+  every forecast step instead of advancing — so multiple forecast steps end up assigned to
+  overlapping/aliased target windows.
+- The stream being evaluated (ERA5, `config/streams/era5_o96_daily/era5.yml`) has
+  `tokenize_spacetime: True`, which intentionally allows one forecast-step window to bundle
+  several native timestamps. Combined with the aliasing above, distinct real timestamps end up
+  landing under what should be a single raw forecast-step bucket.
+- On the eval-read side, `io_workers.py:189-213` detects, per raw forecast step, whether it's
+  gridded with more than one unique timestamp bundled in (`is_gridded and len(unique_times) > 1`)
+  and, when so, keys that step with a running "sub-step counter" instead of the raw forecast-step
+  integer. That counter (starting near 0/1, same as the raw integers used for non-bundled steps)
+  can collide with a raw-integer key used elsewhere in the same stream
+  (`io_orchestration.py:497-516`), so two unrelated forecast steps end up reporting the same
+  `lead_time` — the duplicate that ultimately breaks `.sel()` in `heat_map()`.
+
+**Fix:** keep `time_window_step` (wherever it's actually in effect for the stage doing
+inference — `test_config` for a normal `evaluate` run, per §3's inheritance chain) at or below
+`forecast.time_step`, e.g. set `test_config.time_window_step: 24:00:00` to match a `24:00:00`
+`forecast.time_step`. This was diagnosed but **not yet applied** in this run.
+
+**Trade-off:** shrinking `time_window_step` down to `forecast.time_step` reverts sample
+selection to sequential/consecutive draws from `start_date` (same mechanism as §5) rather than
+the wider spread a large `time_window_step` was chosen for — so this isn't a free fix if spread
+across a long date range matters for the eval.
+
+**This requires re-running inference, not just re-running `evaluate`:** `time_window_step`
+affects which timestamps get written to the output zarr at inference time (§3/§5), so an
+already-produced run's output has the bad windowing baked in — regenerate it before re-scoring.
+
+---
+
 ## Current setup in this repo
 
 - `scripts/inference_1deg.sh`: loads `8level_1deg_2020_smoke2`, writes output to
