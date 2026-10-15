@@ -199,9 +199,9 @@ class DataReaderObs(DataReaderBase):
         end_range_1 = min(diff_in_hours_end, self.hrly_index.shape[0] - 1)
         self.indices_start = self.hrly_index[diff_in_hours_start:end_range_1:step_hrs]
 
-        end_range_2 = min(
-            diff_in_hours_end + len_hrs, self.hrly_index.shape[0] - 1
-        )  # handle beyond end of data range safely
+        # The slice stop is exclusive, so clamp to shape[0] (not shape[0] - 1): otherwise the
+        # last window's end is cut off when the hourly index ends exactly at t_end.
+        end_range_2 = min(diff_in_hours_end + len_hrs, self.hrly_index.shape[0])
         self.indices_end = (
             self.hrly_index[diff_in_hours_start + len_hrs : end_range_2 : step_hrs] - 1
         )
