@@ -1,0 +1,25 @@
+parallelize: false
+# !!! BE CAREFUL !!!
+# Parallelization is supported but not recommended — can lead to unexpected issues.
+
+stages:
+
+  - name: synopinferwfp
+    stage: inference
+    from_run_id: h0pwxx9f # STAGE.myfinetune01
+    options:
+      - test_config.start_date=202001010000
+      - test_config.end_date=202001310000
+      - test_config.samples=10
+    nodes: 1
+    slurm_args:
+      - "--time=02:00:00"
+
+  - name: synopevalwfp
+    stage: evaluation
+    eval_config: config/evaluate/eval_config_synop.yml
+    run_ids:
+      - STAGE.synopinferwfp
+    nodes: 1
+    slurm_args:
+      - "--time=03:00:00"
