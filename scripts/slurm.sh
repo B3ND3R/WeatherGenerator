@@ -1,6 +1,6 @@
 #!/bin/bash -x
 #SBATCH --account=e-ext-2025e01-128
-#SBATCH --time=04:00:00
+#SBATCH --time=01:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=72
