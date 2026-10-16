@@ -2,7 +2,7 @@
 #SBATCH --account=e-ext-2025e01-128
 #SBATCH --time=04:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks=4
+#SBATCH --ntasks=1
 #SBATCH --cpus-per-task=72
 #SBATCH --gres=gpu:4
 #SBATCH --chdir=.
@@ -79,4 +79,5 @@ source "${WEATHERGEN_PRIVATE_REPO_PATH}/hpc/nsys_profiling.sh"
 
 echo "hello jupiter! the environment is setup"
 
+export WORLD_SIZE=1 # just a gaurd against an accidental ntasks>1 request in slurm options
 ./scripts/actions.sh integration-test
