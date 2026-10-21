@@ -1,0 +1,128 @@
+# optional: if commented out all is taken care of by the default settings
+# NB. global options apply to all run_ids 
+global_plotting_options:
+  regions: ["global", "moz"]
+  image_format : "png" #options: "png", "pdf", "svg", "eps", "jpg" ..
+  animation_format: "gif"
+  dpi_val : 300
+  fps: 2
+  log_x: true
+  log_y: true
+
+  CHIRPS:
+    marker_size: 100
+    scale_marker_size: false
+    marker: "o"
+
+    # NB. CHIRPS 'tp' is a DAILY accumulation in mm, not ERA5's metres, so the
+    # usual tp levels are scaled by 1000 (0.0001 m -> 0.1 mm ... 0.02 m -> 20 mm).
+    # The channel is called plainly 'tp', so the pattern must be "tp*":
+    # "tp_*" matches nothing here.
+    "tp*":
+      # NB. `levels` wins over `colorbar_scale` on target/pred maps, so "log" here
+      # only takes effect on bias maps, which the plotter promotes to symlog.
+      colorbar_scale: "linear" # supported: "linear", "log", "symlog"
+      # Bias maps ignore `levels` and fall back to vmin/vmax. Without these they
+      # auto-scale to the 5th/95th percentile, which is asymmetric -- zero ends up
+      # off-centre on the colorbar and the range changes from step to step.
+      vmin: -30.0
+      vmax: 30.0
+      # colormap: "Blues"
+      levels: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0] # mm/day
+      # Trailing "BF" is the alpha byte (0xBF/255 = 0.75), replacing the `alpha`
+      # kwarg -- see the NB in the CHIRPS block above.
+      colors:
+        - "none" # < 0.1 mm/day: dry, drawn transparent
+        - "#BEDAE5BF"
+        - "#80B5CCBF"
+        - "#5691B3BF"
+        - "#4B6E9CBF"
+        - "#424B83BF"
+        - "#45596DBF"
+        - "#5B9E4CBF" # > 20 mm/day
+
+evaluation:
+  regions: ["global", "moz"]
+  metrics: ["rmse"]
+  summary_plots : true
+  ratio_plots : true
+  #baseline: 
+  heat_maps : false
+  summary_dir: "./plots_vh/"
+  plot_ensemble: "members" #supported: false, "std", "minmax", "members"
+  plot_score_maps: true #plot scores on a 2D maps. it slows down score computation
+  plot_score_animations: true #plot animations of score maps across forecast steps. it slows down score computation
+  print_summary: false #print out score values on screen. it can be verbose
+  log_scale: false
+  add_grid: false
+  score_cards: false
+  bar_plots: false
+  #agg_dims: ["ipoint"] #----> NOTE: advanced! Handle with care. This will average the scores across the specified list of dimensions. Supported dimensions: "ipoint", "sample", "forecast_step", "ensemble". Use with caution, as it can hide important details about the model performance. 
+
+default_streams:
+  # ERA5:
+  #   channels: ["2t", "10u", "10v", "z_500", "t_850", "u_850", "v_850", "q_850"]
+  #   evaluation:
+  #     forecast_step: "all"
+  #     sample: "all"
+  #     ensemble: "all" #supported: "all", "mean", [0,1,2]
+  #   plotting:
+  #     sample: [0]
+  #     forecast_step: "all" #supported: "all", [1,2,3,...], "1-50" (equivalent of [1,2,3,...50])
+  #     plot_maps: true
+  #     plot_histograms: false
+  #     plot_animations: true
+
+  CHIRPS:
+    channels: "all"
+    evaluation:
+      # NB. CHIRPS is daily (00 UTC) while the model steps 6-hourly, so each sample
+      # only has a real target on every 4th forecast step; the other three windows are
+      # written empty / NaN. The sample stride in the test period is 30 h == 6 h (mod 24),
+      # so the init hour rotates 06/12/18/00 and the *phase* of the populated steps shifts
+      # by one per sample. Averaging over samples with skipna=True therefore fills all 40
+      # steps, but each step is backed by only a quarter of the samples and by a single
+      # init hour (fstep%4: 1->18Z, 2->12Z, 3->06Z, 0->00Z). That makes consecutive points
+      # disjoint populations and puts a 4-step sawtooth in the line plots.
+      # Restricting to multiples of 4 keeps only the 00 UTC inits: leads +1d ... +10d,
+      # same init population at every point. Set back to "all" for the mixed-init curve.
+      forecast_step: "all" # 00 UTC inits only; was "all"
+      sample: "all"
+      ensemble: "all" #supported: "all", "mean", [0,1,2]
+    plotting:
+      sample: [0]
+      # Leave this at "all": plotting uses sample 0, whose populated steps are 3, 7, ... 39,
+      # so the 00 UTC-init subset above would select only empty windows here.
+      forecast_step: "all" #supported: "all", [1,2,3,...], "1-50" (equivalent of [1,2,3,...50])
+      plot_maps: true
+      plot_bias: true
+      plot_target: true
+      plot_histograms: true
+      plot_animations: true
+
+run_ids : {}
+
+  # wxjhgqbg:
+  #   label: "Temporal JEPA cw6a4szu (w/ ch. weighting): 8-step & CHIRPS.target_readout.num_layers=2/num_heads=4"
+  # xm9u1y2a:
+  #   label: "Temporal JEPA cw6a4szu (w/ ch. weighting): 4-step & CHIRPS.target_readout.num_layers=2/num_heads=4"
+  # zuestpap:
+  #   label: "Temporal JEPA cw6a4szu (w/ ch. weighting): 8-step & CHIRPS.target_readout.num_layers=4/num_heads=8"
+  # wdq4wczw:
+    #label: "Temporal JEPA cw6a4szu (w/ ch. weighting): 4-step & CHIRPS.target_readout.num_layers=4/num_heads=8"
+  #   label: "Temporal JEPA"
+  # zzcqiis1:
+  #   label: "Forecast dy0jlrmw (w/o ch. weighting): 8-step & CHIRPS.target_readout.num_layers=2/num_heads=4"
+  # zsior7dk:
+  #   label: "Forecast dy0jlrmw (w/o ch. weighting): 4-step & CHIRPS.target_readout.num_layers=2/num_heads=4"
+  # pjz639c1:
+  #   label: "Forecast dy0jlrmw (w/o ch. weighting): 8-step & CHIRPS.target_readout.num_layers=4/num_heads=8"
+  # e6i0ed5i:
+    #label: "Forecast dy0jlrmw (w/o ch. weighting): 4-step & CHIRPS.target_readout.num_layers=4/num_heads=8"
+  #   label: "Forecast"
+
+
+  # yz4494lo:
+  #   label: "Temporal JEPA"
+  # zk4dd5lm:
+  #   label: "Forecast"

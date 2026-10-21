@@ -1,0 +1,21 @@
+parallelize: false
+stages:
+  - name: chirpsinfer
+    stage: inference
+    from_run_id: o3z4t233
+    options:
+      - test_config.start_date=202306010000
+      - test_config.end_date=202308300000
+      - test_config.samples=10            # small first; raise once it works
+    nodes: 1
+    slurm_args:
+      - "--time=02:00:00"
+
+  - name: chirpseval
+    stage: evaluation
+    eval_config: config/evaluate/eval_chirps.yml
+    run_ids:
+      - STAGE.chirpsinfer
+    nodes: 1
+    slurm_args:
+      - "--time=02:00:00"
