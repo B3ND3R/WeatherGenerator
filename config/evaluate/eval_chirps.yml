@@ -120,8 +120,6 @@ run_ids : {}
   # e6i0ed5i:
     #label: "Forecast dy0jlrmw (w/o ch. weighting): 4-step & CHIRPS.target_readout.num_layers=4/num_heads=8"
   #   label: "Forecast"
-
-
   # yz4494lo:
   #   label: "Temporal JEPA"
   # zk4dd5lm:
