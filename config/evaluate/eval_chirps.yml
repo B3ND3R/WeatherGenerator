@@ -91,14 +91,14 @@ default_streams:
       ensemble: "all" #supported: "all", "mean", [0,1,2]
     plotting:
       sample: [0]
-      # Leave this at "all": plotting uses sample 0, whose populated steps are 3, 7, ... 39,
-      # so the 00 UTC-init subset above would select only empty windows here.
-      forecast_step: "all" #supported: "all", [1,2,3,...], "1-50" (equivalent of [1,2,3,...50])
-      plot_maps: true
-      plot_bias: true
-      plot_target: true
-      plot_histograms: true
-      plot_animations: true
+      forecast_step: "all"
+      data_plots:
+        - maps:
+            predictions: [image, video]
+            target: [image, video]
+            bias: [image, video]
+        - histograms_per_sample: [image, video]
+
 
 run_ids : {}
 
