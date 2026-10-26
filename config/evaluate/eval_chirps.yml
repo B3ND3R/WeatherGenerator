@@ -1,7 +1,7 @@
 # optional: if commented out all is taken care of by the default settings
 # NB. global options apply to all run_ids 
 global_plotting_options:
-  regions: ["global", "moz"]
+  regions: ["global"] #, "moz"]
   image_format : "png" #options: "png", "pdf", "svg", "eps", "jpg" ..
   animation_format: "gif"
   dpi_val : 300
@@ -42,7 +42,7 @@ global_plotting_options:
         - "#5B9E4CBF" # > 20 mm/day
 
 evaluation:
-  regions: ["global", "moz"]
+  regions: ["global"] # , "moz"]
   metrics: ["rmse"]
   summary_plots : true
   ratio_plots : true
@@ -51,7 +51,7 @@ evaluation:
   summary_dir: "./plots_vh/"
   plot_ensemble: "members" #supported: false, "std", "minmax", "members"
   plot_score_maps: true #plot scores on a 2D maps. it slows down score computation
-  plot_score_animations: true #plot animations of score maps across forecast steps. it slows down score computation
+  plot_score_animations: false #plot animations of score maps across forecast steps. it slows down score computation
   print_summary: false #print out score values on screen. it can be verbose
   log_scale: false
   add_grid: false
