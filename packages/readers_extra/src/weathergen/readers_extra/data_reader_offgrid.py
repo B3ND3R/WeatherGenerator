@@ -37,6 +37,11 @@ column per entry of ``channels``, and each static geoinfo channel takes the colu
 Geoinfo channels that depend on time, e.g. ``insolation`` or ``cos_local_time``, are computed
 for each timestep (see ``_anemoi_dynamic_forcings``) and need no column.
 
+``time_offset`` shifts the time the offgrid samples are labelled with from the start of their
+period, e.g. ``23h`` for a stream whose days are labelled at 23:00 (``daily_anchor`` of CHIRPS).
+The time of day of a target is an input of the decoder, so it should match the labels the stream
+was trained with. The default is 0, i.e. the start of the period.
+
 A relative path of a file is resolved from the working directory.
 
 The model input (source) of the stream stays what it is: the data read by the reader of
@@ -96,8 +101,9 @@ class DataReaderOffgrid(DataReaderTimestep):
             ``N320``), ``geoinfos`` (``file`` with an (N, G) array and ``channels`` with the names
             of its G columns, which have to include the static geoinfo channels of the stream;
             needed if the stream has static geoinfo channels), ``frequency`` (spacing of the
-            offgrid samples; default is the time window step) and ``max_num_targets`` (default
-            is -1, i.e. all points).
+            offgrid samples; default is the time window step), ``time_offset`` (time of the
+            samples after the start of their period; default is 0) and ``max_num_targets``
+            (default is -1, i.e. all points).
 
         Returns
         -------
@@ -124,6 +130,11 @@ class DataReaderOffgrid(DataReaderTimestep):
             period,
         )
         self.len = int((tw_handler.t_end - tw_handler.t_start) / period)
+        # time of the samples after the start of their period, e.g. the daily_anchor of CHIRPS
+        self.time_offset = parse_timedelta(offgrid.get("time_offset", 0))
+        assert np.timedelta64(0, "ms") <= self.time_offset < period, (
+            f"{ds_name}: offgrid.time_offset must be in [0, frequency), got {self.time_offset}."
+        )
 
         # reader the stream was trained with, selected as in MultiStreamDataSampler; it provides
         # the channels, the normalization and the source data
@@ -280,7 +291,7 @@ class DataReaderOffgrid(DataReaderTimestep):
         data = np.full((n_total, len(channels_idx)), np.nan, dtype=np.float32)
 
         # compute absolute times for each step, then repeat per point
-        step_times = self.data_start_time + self.period * t_idxs
+        step_times = self.data_start_time + self.period * t_idxs + self.time_offset
         datetimes = np.repeat(step_times, self.n_points)
 
         # repeat static geoinfos for each timestep and compute the dynamic ones for it
