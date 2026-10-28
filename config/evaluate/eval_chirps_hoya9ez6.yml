@@ -1,0 +1,115 @@
+# Fast evaluation of the CHIRPS precipitation decoders on the frozen daily ERA5 N320 model hoya9ez6.
+# Each inference run: 72 inits (first target day 2023-06-03 .. 2023-08-13), 10 forecast days, every
+# day holding all 3,972,632 CHIRPS land pixels at 0.05 deg (inference forces max_num_targets -1),
+# 4 rank zips of ~7.7-8 GB. The evaluation reads them as gridded data.
+# Written for the evaluate package of iluise/fasteval-anemoi-target-source (score_plots / data_plots
+# syntax), following config/evaluate/eval_chirps.yml (branch vhertel/develop-ssl-diffusion-v1/
+# 1699-anemoi-config) and weathergen-configs/highres-decoder/evaluate/eval_local_coords.yml.
+# NB. global options apply to all run_ids
+global_plotting_options:
+  regions: ["global"]
+  image_format : "png" #options: "png", "pdf", "svg", "eps", "jpg" ..
+  animation_format: "mp4"
+  dpi_val : 300
+  fps: 2
+
+  CHIRPS:
+    # Full fields are drawn as one square marker per 0.05 deg pixel. With more than 200,000 points
+    # the plotter uses a 16 x 8 inch figure, where neighbouring pixels are ~0.15 pt apart; a side
+    # of sqrt(0.1) = 0.32 pt (about one pixel at 300 dpi) closes the gaps without blurring.
+    marker: "s"
+    marker_size: 0.1
+    scale_marker_size: false
+
+    # CHIRPS 'tp' is a DAILY accumulation in mm, not ERA5's metres. The channel is called plainly
+    # 'tp', so the pattern must be "tp*": "tp_*" matches nothing here.
+    "tp*":
+      # `levels` wins over `colorbar_scale` on target/prediction maps, so "linear" here only
+      # matters for bias maps.
+      colorbar_scale: "linear" # supported: "linear", "log", "symlog"
+      # Bias maps ignore `levels` and use vmin/vmax; fixed and symmetric so that zero stays in the
+      # centre and the scale does not change between days.
+      vmin: -30.0
+      vmax: 30.0
+      levels: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0] # mm/day
+      # Opacity is baked into the hex codes (trailing "BF" = 0.75); never set `alpha` here, it would
+      # turn the transparent "none" colour into black dots.
+      colors:
+        - "none" # < 0.1 mm/day: dry, drawn transparent
+        - "#BEDAE5BF"
+        - "#80B5CCBF"
+        - "#5691B3BF"
+        - "#4B6E9CBF"
+        - "#424B83BF"
+        - "#45596DBF"
+        - "#5B9E4CBF" # > 20 mm/day
+
+# NB. Compute node only. Scoring loads target + prediction of all 72 x 10 (sample, day) pairs into
+# RAM before anything is written. This cap also limits the zarr I/O workers.
+max_workers: 16
+
+evaluation:
+  metrics:
+    - rmse
+    # Power spectra. SHT needs a global grid and CHIRPS covers land between 50S and 50N only, so
+    # the spectrum is the zonal FFT: the land pixels are regridded (nearest neighbour) to a regular
+    # grid within 50S-50N, which fills the oceans with the value of the nearest land pixel, and the
+    # FFT is averaged over all latitude rows. Read it as a relative diagnostic (prediction vs
+    # target), not as the spectrum of rainfall itself.
+    # 0.05 deg (the native CHIRPS spacing) on purpose: it gives 7200 longitudes. Every coarser
+    # resolution gives an odd count (e.g. 1441 at 0.25 deg), for which the evaluate package returns
+    # one frequency more than PSD values and the PSD plot fails. Costs ~24 s per field (2 s at 0.25).
+    - psd:
+        psd_method: "fft"
+        psd_regrid_resolution: 0.05
+  # metric_plots: rmse vs lead time and the PSD curves; ratio: rmse relative to the baseline (it
+  # does not apply to psd); score_map: rmse per pixel over all inits, one map per forecast day.
+  score_plots: [metric_plots, ratio, score_map]
+  # reference model: 65,536 points per day, log1p
+  baseline: "w1jthwxt"
+  # Absolute on purpose: launch-slurm.py runs the job from a temporary copy of the repo, so a
+  # relative path would put the score plots into that copy.
+  summary_dir: "/e/project1/e-ext-2025e01-128/hertel2/code/WeatherGenerator/plots_vh/"
+  plot_ensemble: false #supported: false, "std", "minmax", "members"
+  print_summary: false #print out score values on screen. it can be verbose
+  log_scale: false
+  add_grid: false
+
+
+default_streams:
+  CHIRPS:
+    regions: ["global"]
+    channels: ["tp"]
+    evaluation:
+      # days 1-10 after the input day (step 0 only holds the source window); step k is the
+      # rainfall of day D+k, 00-24 UTC, for input day D
+      forecast_step: "all"
+      sample: "all"
+      ensemble: "all" #supported: "all", "mean", [0,1,2]
+    plotting:
+      # sample 0 has the same init (input day 2023-06-02, first target day 2023-06-03) in all runs
+      sample: [0]
+      forecast_step: [1, 2, 5, 10] #supported: "all", [1,2,3,...], "1-50" (equivalent of [1,2,3,...50])
+      data_plots:
+        - maps:
+            predictions: [image]
+            target: [image]
+            bias: [image]
+
+
+# label: points per day in training, transform (training run). All inference runs: 72 inits,
+# 10 days, full grid, latest checkpoint of the training run (--mini-epoch -1).
+run_ids :
+
+  w1jthwxt:
+    label: "65,536 pts/day, log1p (o3z4t233)"
+    color: "#2a78d6"
+  d1sc7mxp:
+    label: "65,536 pts/day, no transform (dmdh2cjg)"
+    color: "#eb6834"
+  roi32lmq:
+    label: "542,080 pts/day, log1p (zjk1udv3)"
+    color: "#4a3aa7"
+  w5zf6zrp:
+    label: "542,080 pts/day, no transform (jzwtat5o)"
+    color: "#1baf7a"
