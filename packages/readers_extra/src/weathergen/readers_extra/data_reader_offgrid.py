@@ -42,14 +42,48 @@ period, e.g. ``23h`` for a stream whose days are labelled at 23:00 (``daily_anch
 The time of day of a target is an input of the decoder, so it should match the labels the stream
 was trained with. The default is 0, i.e. the start of the period.
 
+Instead of ``coords``, the points can be taken from an observation store in the layout read by
+``DataReaderObs`` (``data`` with a ``colnames`` attribute, ``dates`` and the hourly index
+``idx_<base_datetime>_1``), e.g. station observations, to score the model against them::
+
+    streams:
+      CHIRPS:
+        type: offgrid
+        base_type: chirps
+        offgrid:
+          obs:
+            file: /path/to/observations.zarr
+            channels: {tp: obsvalue_tp_0}
+          time_offset: 23h
+
+Every row of the store at a time of the samples (see ``time_offset``) is a point: its target has
+the coordinates, time and values of that row, so predictions and observations are in the same
+place in the output and evaluation can compare them directly. Nothing is matched by station or
+coordinate. The points change from sample to sample as stations report or not.
+
+- ``channels`` maps a target channel of the stream to the column of the store holding it. Target
+  channels that are not mapped are NaN. The values must be in the units of the stream.
+- ``geoinfos`` (optional) maps each static geoinfo channel of the stream to a column of the store,
+  e.g. ``{lsm: lsm}``; it replaces ``offgrid.geoinfos``.
+- ``step_times_only`` (default true) keeps only the rows at the times of the samples. The time of
+  day of a target is an input of the decoder, which only saw targets at those times in training.
+  With false all rows in the time window are returned, e.g. hourly observations for a 6-hourly
+  stream.
+- ``base_datetime`` (default ``1970-01-01T00:00``) is the start of the hourly index.
+
+The rows are found with the hourly index, so only the rows of a time window are read and stores
+of any size work. A warning is logged for a time window that has rows but none at the times of
+the samples; check ``time_offset`` against the times of the store then.
+
 A relative path of a file is resolved from the working directory.
 
 The model input (source) of the stream stays what it is: the data read by the reader of
 ``base_type``. Only the points the model predicts at (target) change: their coordinates and
-geoinfos are those of the offgrid points, and their values are NaN since there is no data there.
-Channels and normalization are taken from the reader of ``base_type`` as well, so they are the
-ones the model was trained with, whatever the format of the dataset. For a stream with several
-files the offgrid points are returned once, by the reader of the first file.
+geoinfos are those of the offgrid points. With ``coords`` their values are NaN since there is no
+data there; with ``obs`` they are the observations. Channels and normalization are taken from the
+reader of ``base_type`` as well, so they are the ones the model was trained with, whatever the
+format of the dataset. For a stream with several files the offgrid points are returned once, by
+the reader of the first file.
 """
 
 import datetime
@@ -58,13 +92,16 @@ from pathlib import Path
 from typing import override
 
 import numpy as np
+import zarr
 from earthkit.data.utils.dates import to_datetime
 from numpy.typing import NDArray
 
 from weathergen.common.config import parse_timedelta
 from weathergen.datasets.data_reader_anemoi import DataReaderAnemoi
 from weathergen.datasets.data_reader_base import (
+    NPDT64,
     DataReaderTimestep,
+    DTRange,
     ReaderData,
     TimeWindowHandler,
     TIndex,
@@ -103,7 +140,9 @@ class DataReaderOffgrid(DataReaderTimestep):
             needed if the stream has static geoinfo channels), ``frequency`` (spacing of the
             offgrid samples; default is the time window step), ``time_offset`` (time of the
             samples after the start of their period; default is 0) and ``max_num_targets``
-            (default is -1, i.e. all points).
+            (default is -1, i.e. all points). Instead of ``coords`` and ``geoinfos``, ``obs``
+            takes the points and their targets from an observation store (see the module
+            docstring).
 
         Returns
         -------
@@ -160,17 +199,9 @@ class DataReaderOffgrid(DataReaderTimestep):
             self.init_empty()
             return
 
-        # caches lats and lons; coords is a file with the points or names a default grid
-        if str(offgrid["coords"]).endswith(".npy"):
-            coords = np.load(offgrid["coords"])
-        else:
-            coords = _grid_coords(str(offgrid["coords"]))
-        assert coords.ndim == 2 and coords.shape[1] == 2, (
-            f"{ds_name}: offgrid.coords must have shape (N, 2) for [lat, lon], got {coords.shape}."
+        assert ("coords" in offgrid) != ("obs" in offgrid), (
+            f"{ds_name}: set exactly one of offgrid.coords and offgrid.obs."
         )
-        self.latitudes = _clip_lat(coords[:, 0])
-        self.longitudes = _clip_lon(coords[:, 1])
-        self.n_points = len(self.latitudes)
 
         # all offgrid points are returned by default; max_num_targets of the trained model is a
         # training setting and would drop a random part of them
@@ -201,6 +232,31 @@ class DataReaderOffgrid(DataReaderTimestep):
             else:
                 self.geoinfo_channels_static += [ch]
                 self.geoinfo_idx_static_lin += [idx]
+
+        # points and targets from an observation store: the points change with time, so there
+        # are no fixed coordinates or static geoinfos
+        self.obs = None
+        if "obs" in offgrid:
+            self.obs = _ObsTargets(
+                offgrid["obs"], self.target_channels, self.geoinfo_channels_static, ds_name
+            )
+            _logger.info(f"{ds_name}: offgrid points from observations in {self.obs.filename}")
+            _logger.info(f"{ds_name}: source channels: {self.source_channels}")
+            _logger.info(f"{ds_name}: target channels: {self.target_channels}")
+            _logger.info(f"{ds_name}: geoinfo channels: {self.geoinfo_channels}")
+            return
+
+        # caches lats and lons; coords is a file with the points or names a default grid
+        if str(offgrid["coords"]).endswith(".npy"):
+            coords = np.load(offgrid["coords"])
+        else:
+            coords = _grid_coords(str(offgrid["coords"]))
+        assert coords.ndim == 2 and coords.shape[1] == 2, (
+            f"{ds_name}: offgrid.coords must have shape (N, 2) for [lat, lon], got {coords.shape}."
+        )
+        self.latitudes = _clip_lat(coords[:, 0])
+        self.longitudes = _clip_lon(coords[:, 1])
+        self.n_points = len(self.latitudes)
 
         # static geoinfos at the offgrid points; the columns of the file are named by
         # offgrid.geoinfos.channels and each static geoinfo channel takes the column of its name
@@ -280,6 +336,10 @@ class DataReaderOffgrid(DataReaderTimestep):
 
         assert t_idxs[0] >= 0, "index must be non-negative"
 
+        if self.obs is not None:
+            step_times = self.data_start_time + self.period * t_idxs + self.time_offset
+            return self._get_obs(step_times, dtr, channels_idx)
+
         n_steps = len(t_idxs)
         n_total = self.n_points * n_steps
 
@@ -315,6 +375,55 @@ class DataReaderOffgrid(DataReaderTimestep):
 
         return rd
 
+    def _get_obs(
+        self, step_times: NDArray[NPDT64], dtr: DTRange, channels_idx: list[int]
+    ) -> ReaderData:
+        """
+        Offgrid samples at the observations of one time window, one point per row of the store.
+
+        Parameters
+        ----------
+        step_times : np.array
+            Times of the samples in the window
+        dtr :
+            The time window
+        channels_idx : np.array
+            Selection of channels
+
+        Returns
+        -------
+        ReaderData providing coords, geoinfos, data, datetimes
+        """
+
+        channel_names = dict(zip(self.target_idx, self.target_channels, strict=True))
+        rows = self.obs.get(step_times, dtr, [channel_names[i] for i in channels_idx])
+
+        # static geoinfos are columns of the store, the dynamic ones are computed for the time
+        # of each row
+        geoinfos = np.empty((len(rows.datetimes), len(self.geoinfo_idx)), dtype=np.float32)
+        geoinfos[:, self.geoinfo_idx_static_lin] = rows.geoinfos
+        if len(self.geoinfo_channels_dynamic) > 0:
+            lats, lons = rows.coords[:, 0], rows.coords[:, 1]
+            for t in np.unique(rows.datetimes):
+                at_t = rows.datetimes == t
+                geoinfos_dynamic = _anemoi_get_dynamic_forcings(
+                    [t], lats[at_t], lons[at_t], self.geoinfo_channels_dynamic
+                )
+                for i, ch in zip(
+                    self.geoinfo_idx_dynamic_lin, self.geoinfo_channels_dynamic, strict=True
+                ):
+                    geoinfos[at_t, i] = geoinfos_dynamic[ch]
+
+        rd = ReaderData(
+            coords=rows.coords,
+            geoinfos=geoinfos,
+            data=rows.data,
+            datetimes=rows.datetimes,
+        )
+        check_reader_data(rd, dtr)
+
+        return rd
+
     # normalization is that of the reader the stream was trained with; some readers implement
     # their own instead of the mean / stdev scaling of the base class
 
@@ -337,6 +446,150 @@ class DataReaderOffgrid(DataReaderTimestep):
     @override
     def denormalize_target_channels(self, target: NDArray) -> NDArray:
         return self.reader.denormalize_target_channels(target)
+
+
+class _ObsTargets:
+    """
+    Rows of an observation store in the layout of DataReaderObs as offgrid points with targets
+    """
+
+    def __init__(
+        self, cfg: dict, target_channels: list[str], geoinfo_channels: list[str], ds_name: str
+    ) -> None:
+        """
+        Parameters
+        ----------
+        cfg :
+            offgrid.obs of the stream config: ``file``, ``channels`` and optionally
+            ``geoinfos``, ``step_times_only``, ``base_datetime`` and ``coords_channels``
+        target_channels :
+            target channels of the stream
+        geoinfo_channels :
+            static geoinfo channels of the stream, in the order they are returned
+        ds_name :
+            name of the stream, for messages
+        """
+
+        self.filename = cfg["file"]
+        self.ds_name = ds_name
+        z = zarr.open(self.filename, mode="r")
+        self.data = z["data"]
+        self.dates = z["dates"]
+        colnames = list(self.data.attrs["colnames"])
+
+        self.base_datetime = np.datetime64(cfg.get("base_datetime", "1970-01-01T00:00"), "ns")
+        stamp = self.base_datetime.astype("datetime64[m]").item().strftime("%Y%m%d%H%M")
+        # hrly_index[h] is the number of rows with date <= base_datetime + h hours; loaded into
+        # memory (8 bytes per hour) since it is looked up for every window
+        self.hrly_index = z[f"idx_{stamp}_1"][:]
+
+        self.step_times_only = cfg.get("step_times_only", True)
+
+        # stream channel -> column of the store
+        channels = dict(cfg["channels"])
+        unknown = [ch for ch in channels if ch not in target_channels]
+        assert len(unknown) == 0, (
+            f"{ds_name}: offgrid.obs.channels {unknown} are not target channels of the stream "
+            f"{target_channels}."
+        )
+        geoinfos = dict(cfg.get("geoinfos") or {})
+        missing = [ch for ch in geoinfo_channels if ch not in geoinfos]
+        assert len(missing) == 0, (
+            f"{ds_name}: static geoinfo channels {missing} are not in offgrid.obs.geoinfos."
+        )
+        coords_channels = list(cfg.get("coords_channels", ["lat", "lon"]))
+        absent = [
+            c
+            for c in [*channels.values(), *geoinfos.values(), *coords_channels]
+            if c not in colnames
+        ]
+        assert len(absent) == 0, (
+            f"{ds_name}: columns {absent} are not in {self.filename}, which has {colnames}."
+        )
+
+        self.channel_cols = {ch: colnames.index(col) for ch, col in channels.items()}
+        self.geoinfo_cols = [colnames.index(geoinfos[ch]) for ch in geoinfo_channels]
+        self.coords_cols = [colnames.index(c) for c in coords_channels]
+
+    def get(self, step_times: NDArray[NPDT64], dtr: DTRange, channels: list[str]) -> ReaderData:
+        """
+        Rows at the times of the samples, or all rows of the window without step_times_only.
+
+        Parameters
+        ----------
+        step_times : np.array
+            Times of the samples in the window
+        dtr :
+            The time window
+        channels :
+            Target channels to return; channels without a column of the store are NaN
+
+        Returns
+        -------
+        ReaderData with coords, the static geoinfos, data and datetimes of the rows
+        """
+
+        window = (self._first_row_at_or_after(dtr.start), self._first_row_at_or_after(dtr.end))
+        if self.step_times_only:
+            # rows with date == t are those from the first at or after t to the first after t
+            one_ns = np.timedelta64(1, "ns")
+            ranges = [
+                (self._first_row_at_or_after(t), self._first_row_at_or_after(t + one_ns))
+                for t in step_times
+            ]
+        else:
+            ranges = [window]
+        ranges = [(lo, hi) for lo, hi in ranges if lo < hi]
+        if self.step_times_only and len(ranges) == 0 and window[0] < window[1]:
+            _logger.warning(
+                f"{self.ds_name}: {self.filename} has {window[1] - window[0]} rows in {dtr}, but "
+                f"none at the times of the samples {step_times}. Check offgrid.time_offset."
+            )
+
+        # read only the columns needed, once per range of rows
+        data_cols = [self.channel_cols[ch] for ch in channels if ch in self.channel_cols]
+        cols = [*self.coords_cols, *self.geoinfo_cols, *data_cols]
+        blocks = [self.data.oindex[lo:hi, cols] for lo, hi in ranges]
+        block = np.concatenate(blocks) if blocks else np.empty((0, len(cols)), np.float32)
+        datetimes = np.concatenate(
+            [self.dates[lo:hi, 0] for lo, hi in ranges] or [np.empty(0, "datetime64[ns]")]
+        )
+
+        n_coords, n_geo = len(self.coords_cols), len(self.geoinfo_cols)
+        # clip in float64 so that valid coordinates of the store are returned unchanged
+        latlon = block[:, :n_coords].astype(np.float64)
+        coords = np.stack([_clip_lat(latlon[:, 0]), _clip_lon(latlon[:, 1])], axis=1)
+        geoinfos = block[:, n_coords : n_coords + n_geo].astype(np.float32)
+        data = np.full((len(block), len(channels)), np.nan, dtype=np.float32)
+        mapped = [j for j, ch in enumerate(channels) if ch in self.channel_cols]
+        data[:, mapped] = block[:, n_coords + n_geo :]
+
+        return ReaderData(coords=coords, geoinfos=geoinfos, data=data, datetimes=datetimes)
+
+    def _first_row_at_or_after(self, t: NPDT64) -> int:
+        """
+        Index of the first row with date >= t, i.e. the number of rows with date < t.
+        """
+        t = np.datetime64(t, "ns")
+        lo, hi = self._bracket(t)
+        return lo + int(np.searchsorted(self.dates[lo:hi, 0], t, side="left"))
+
+    def _bracket(self, t: NPDT64) -> tuple[int, int]:
+        """
+        Rows [lo, hi) that contain the position of the first row with date >= t.
+
+        hrly_index[h] is the number of rows with date <= base_datetime + h hours, so with
+        h = ceil(hours from base_datetime to t), every row before lo has date <= h - 1 hours < t
+        and every row from hi on has date > h hours >= t. Only the dates of the hour bin
+        (h - 1, h] are left to search. Same as DataReaderObs._bracket on the obs indexing fix.
+        """
+        n_hours = self.hrly_index.shape[0]
+        h = int(np.ceil((t - self.base_datetime) / np.timedelta64(1, "h")))
+        lo = 0 if h <= 0 else int(self.hrly_index[min(h - 1, n_hours - 1)])
+        # rows after the last indexed hour exist, so search to the end of the data;
+        # clamp h at 0 so t before base_datetime does not wrap to the end of the index
+        hi = self.data.shape[0] if h >= n_hours else int(self.hrly_index[max(h, 0)])
+        return lo, hi
 
 
 def _grid_coords(grid: str) -> NDArray[np.float64]:

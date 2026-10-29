@@ -38,8 +38,14 @@ streams:
     # reader type the stream was trained with; provides channels and normalization
     base_type: chirps
     offgrid:
-      # (N, 2) array of [lat, lon] in degrees of the stations
-      coords: /e/project1/e-ext-2025e01-128/bender3/data/moz_stations/latlon.npy
+      # predict at the rain gauge observations, with the gauge totals as targets, so that
+      # evaluation scores the forecast against them; every gauge reading on a forecast day is a
+      # point. For forecasts at fixed points without targets use instead
+      #   coords: /e/project1/e-ext-2025e01-128/bender3/data/moz_stations/latlon.npy
+      obs:
+        file: /e/project1/e-ext-2025e01-128/bender3/data/moz_stations/precip-daily-gauge-corrected-moz-1998-2026-v1.zarr
+        # CHIRPS tp and the gauge totals are both mm/day
+        channels: {tp: obsvalue_tp_0}
       # CHIRPS has no geoinfo channels, so no geoinfos are needed
       # CHIRPS days are labelled at 23:00 (daily_anchor) and the decoder sees the time of day of
       # its targets, so the station points are labelled the same way
