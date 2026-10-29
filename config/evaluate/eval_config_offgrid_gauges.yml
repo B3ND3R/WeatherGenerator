@@ -1,0 +1,62 @@
+# Evaluation config for an offgrid CHIRPS run (config_chirps_offgrid_inference.yml) scored against
+# the WFP Mozambique rain gauges.
+# The offgrid run writes NaN targets at the stations, so first copy its rank zips with the gauge
+# totals filled in (extreme-weather-forecasting/scripts/fill_offgrid_targets.py). results_base_dir
+# below points the evaluation at that copy; metrics and plots are written there too.
+#
+#   uv run --offline evaluate --config config/evaluate/eval_config_offgrid_gauges.yml
+
+global_plotting_options:
+  image_format: "png"
+  animation_format: "gif"
+  dpi_val: 300
+  fps: 2
+
+  CHIRPS:
+    marker_size: 100
+    scale_marker_size: false
+    marker: "o"
+    # CHIRPS and gauge 'tp' are daily totals in mm
+    "tp*":
+      colorbar_scale: "linear"
+      vmin: -30.0
+      vmax: 30.0
+      levels: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0] # mm/day
+      colors:
+        - "none" # < 0.1 mm/day: dry, drawn transparent
+        - "#BEDAE5BF"
+        - "#80B5CCBF"
+        - "#5691B3BF"
+        - "#4B6E9CBF"
+        - "#424B83BF"
+        - "#45596DBF"
+        - "#5B9E4CBF" # > 20 mm/day
+
+evaluation:
+  metrics: ["rmse", "mae"]
+  score_plots: [metric_plots]
+  summary_dir: "./plots_offgrid_gauges/"
+  plot_ensemble: false
+  plot_score_animations: false # broken on develop, see wegen_inference_and_eval.md section 15
+  print_summary: true
+
+default_streams:
+  CHIRPS:
+    regions: ["global"]
+    channels: ["tp"]
+    evaluation:
+      forecast_step: "all"
+      sample: "all"
+    plotting:
+      sample: [0]
+      forecast_step: "all"
+      data_plots:
+        - maps:
+            predictions: [image]
+            target: [image]
+            bias: [image]
+
+run_ids:
+  on3a1ebp:
+    label: "zjk1udv3 offgrid vs gauges"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/on3a1ebp

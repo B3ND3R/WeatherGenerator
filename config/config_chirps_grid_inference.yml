@@ -1,0 +1,30 @@
+# (C) Copyright 2026 WeatherGenerator contributors.
+#
+# This software is licensed under the terms of the Apache Licence Version 2.0
+# which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+#
+# In applying this licence, ECMWF does not waive the privileges and immunities
+# granted to it by virtue of its status as an intergovernmental organisation
+# nor does it submit to any jurisdiction.
+
+# Overwrite config for a single inference run of a CHIRPS decoder (e.g. zjk1udv3) on the grids of
+# its streams: ERA5 at N320 and CHIRPS at 0.05 degree. Use it together with --from-run-id, e.g.
+#
+#   uv run --offline inference --from-run-id zjk1udv3 --config config/config_chirps_grid_inference.yml
+#
+# Streams are inherited from the config of the trained model. Do not set streams_directory in
+# this file. For the same run at station locations see config_chirps_offgrid_inference.yml.
+
+test_config:
+  # one forecast needs (num_steps + offset + 1) = 10 daily windows after its init, so leave at
+  # least 11 days; the number of forecasts is set by samples_per_mini_epoch
+  start_date: 2023-06-01T00:00
+  end_date: 2023-06-15T00:00
+  samples_per_mini_epoch: 1
+  output:
+    num_samples: 1
+
+data_loading:
+  # the sample count is rounded down to a multiple of batch_size * num_workers; with more workers
+  # than samples nothing is run
+  num_workers: 1
