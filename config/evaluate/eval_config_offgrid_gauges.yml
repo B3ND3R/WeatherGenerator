@@ -1,10 +1,13 @@
 # Evaluation config for an offgrid CHIRPS run (config_chirps_offgrid_inference.yml) scored against
 # the WFP Mozambique rain gauges.
-# The offgrid run writes NaN targets at the stations, so first copy its rank zips with the gauge
-# totals filled in (extreme-weather-forecasting/scripts/fill_offgrid_targets.py). results_base_dir
-# below points the evaluation at that copy; metrics and plots are written there too.
+# Runs made with offgrid.obs (gauge zarr as targets, bender/chirps-decoder) need nothing else:
 #
-#   uv run --offline evaluate --config config/evaluate/eval_config_offgrid_gauges.yml
+#   uv run --offline evaluate --config config/evaluate/eval_config_offgrid_gauges.yml --run-ids <id>
+#
+# Runs made with offgrid.coords (e.g. on3a1ebp) have NaN targets at the stations: first copy their
+# rank zips with the gauge totals filled in (extreme-weather-forecasting/scripts/
+# fill_offgrid_targets.py), and point results_base_dir of the run at that copy as below; metrics
+# and plots are written there too.
 
 global_plotting_options:
   image_format: "png"
