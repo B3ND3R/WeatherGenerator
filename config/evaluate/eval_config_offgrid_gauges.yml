@@ -45,7 +45,7 @@ evaluation:
 
 default_streams:
   CHIRPS:
-    regions: ["global"]
+    regions: ["moz"]
     channels: ["tp"]
     evaluation:
       forecast_step: "all"
@@ -60,6 +60,6 @@ default_streams:
             bias: [image]
 
 run_ids:
-  on3a1ebp:
+  rtn01cow:
     label: "zjk1udv3 offgrid vs gauges"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/on3a1ebp
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/git/WeatherGenerator/results/rtn01cow
