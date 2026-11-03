@@ -111,6 +111,8 @@ Any stream name can appear as a key inside `global_plotting_options` to set stre
 | `colors` | list[str] | yes | — | Explicit list of colors used to build a discrete `ListedColormap` (e.g. hex codes like "#BEDAE5"; `"none"` is allowed for transparency). Takes precedence over `colormap` and is typically combined with `levels`. Ignored for bias maps, which always use `coolwarm` for visual consistency. |
 | `levels` | list[float] | yes | — | Explicit colorscale boundary values (e.g. `[-10, -5, 0, 5, 10]`). When set, a `BoundaryNorm` is applied and `vmin`/`vmax` are ignored. |
 | `colorbar_scale` | str | yes | `"linear"` | Colorbar scaling: `"linear"`, `"log"`, or `"symlog"`. `"log"` is intended for single-sign skewed distributions (e.g. `tp`) and requires `vmin > 0`, otherwise it warns and falls back to `"linear"`. `"symlog"` handles skewed double-sign variables (e.g. `u`, `v`) and is default for non-linear bias plots since they are signed. Unknown values warn and fall back to `"linear"`. Explicit levels (non-bias plots) override this with a `BoundaryNorm`. |
+| `add_admin0_bounds` | bool | yes | `false` | Overlay the admin0 boundaries on the map |
+| `add_admin1_bounds` | bool | yes | `false` | Overlay the admin1 boundaries on the map |
 | `add_healpix_grid` | bool | yes | `false` | Overlay a HEALPix grid on map plots. |
 | `healpix_nside` | int | yes | `4` | HEALPix `nside` controlling grid resolution. Higher values produce a finer grid. |
 | `healpix_color` | str | yes | `"black"` | Colour of the HEALPix grid lines. |
