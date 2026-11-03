@@ -663,6 +663,7 @@ class Plotter:
                 - use_datashader (bool)
                 - norm (matplotlib.colors.Normalize or BoundaryNorm)
                 - add_healpix_grid (bool) and related healpix_* keys
+                - add_admin1_bounds (bool) add the admin 1 boundary lines
                 - extra (dict) – leftover kwargs for ``ax.scatter``
         """
         kw = map_kwargs.copy() if map_kwargs is not None else {}
@@ -682,6 +683,7 @@ class Plotter:
             "colorbar_scale": kw.pop("colorbar_scale", "linear"),
             # HEALPix grid
             "add_healpix_grid": kw.pop("add_healpix_grid", False),
+            "add_admin1_bounds": kw.pop("add_admin1_bounds", False),
             "healpix_nside": kw.pop("healpix_nside", 4),
             "healpix_color": kw.pop("healpix_color", "black"),
             "healpix_linewidth": kw.pop("healpix_linewidth", 0.2),
@@ -1025,9 +1027,17 @@ class Plotter:
         ax = fig.add_subplot(1, 1, 1, projection=proj)
         try:
             ax.coastlines(linewidth=0.3)
+            
         except Exception:
             _logger.warning("Could not add coastlines to plot; continuing without them.")
 
+        if opts["add_admin1_bounds"]:
+            try: 
+                import cartopy.feature as cfeature
+                ax.add_feature(cfeature.STATES.with_scale('10m'), edgecolor='gray', linewidth=1.5, facecolor='none')
+            except:
+                _logger.warning("Could not add admin 1 boundaries to plot; continuing without them.")
+                
         for spine in ax.spines.values():
             spine.set_linewidth(0.3)
 

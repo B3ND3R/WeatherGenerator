@@ -8,6 +8,7 @@
 # rank zips with the gauge totals filled in (extreme-weather-forecasting/scripts/
 # fill_offgrid_targets.py), and point results_base_dir of the run at that copy as below; metrics
 # and plots are written there too.
+max_workers: 1
 
 global_plotting_options:
   image_format: "png"
@@ -16,7 +17,8 @@ global_plotting_options:
   fps: 2
 
   CHIRPS:
-    marker_size: 100
+    add_admin1_bounds: true
+    marker_size: 50
     scale_marker_size: false
     marker: "o"
     # CHIRPS and gauge 'tp' are daily totals in mm
