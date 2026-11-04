@@ -17,6 +17,7 @@ global_plotting_options:
   fps: 2
 
   CHIRPS:
+    add_admin0_bounds: true
     add_admin1_bounds: true
     marker_size: 50
     scale_marker_size: false
