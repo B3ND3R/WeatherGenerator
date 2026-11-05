@@ -64,5 +64,8 @@ default_streams:
 
 run_ids:
   rtn01cow:
-    label: "zjk1udv3 offgrid vs gauges"
+    label: "zjk1udv3 CHIRPS"
     results_base_dir: /e/project1/e-ext-2025e01-128/bender3/git/WeatherGenerator/results/rtn01cow
+  on3a1ebp:
+    label: 'ibpnc1py ERA5'
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/on3a1ebp
