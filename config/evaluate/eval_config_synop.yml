@@ -1,0 +1,23 @@
+#Evaluation config for the SYNOP (NOAA GHCNh) diagnostic stream.
+# NB. run_ids are supplied via --run-ids (e.g. by launch-slurm.py pipelines), so default_streams applies.
+
+evaluation:
+  metrics: ["rmse", "mae"]
+  score_plots: [metric_plots]
+  summary_dir: "./plots/"
+  plot_ensemble: false
+  print_summary: false
+
+default_streams:
+  SYNOP:
+    regions: ["global"]
+    channels: ["obsvalue_temperature", "obsvalue_station_level_pressure", "obsvalue_wind_direction", "obsvalue_wind_speed"]
+    evaluation:
+      forecast_step: "all"
+      sample: "all"
+    plotting:
+      sample: [0]
+      forecast_step: "all"
+      data_plots:
+        - maps:
+            predictions: [image]
