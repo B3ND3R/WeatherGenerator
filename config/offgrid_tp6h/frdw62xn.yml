@@ -1,0 +1,44 @@
+# Overwrite config for inference of frdw62xn (ICON-DREAM precipitation decoder) with its precipitation stream ICON_DREAM_TP
+# predicted at the 67 Mozambique rain gauge stations instead of on its grid. Use it with
+# --from-run-id, e.g.
+#
+#   uv run --offline inference --from-run-id frdw62xn --config config/offgrid_tp6h/frdw62xn.yml
+#
+# The model forecasts 6-hourly precipitation totals, but the gauges are daily totals, and an
+# accumulated variable can't be scored step by step against them. So the targets are left empty
+# (NaN, offgrid.coords) and the forecasts are scored with
+# extreme-weather-forecasting/scripts/eval_gauges_daily.py, which sums 4 x 6h steps into UTC days.
+# Streams are inherited from the trained model; do not set streams_directory here.
+
+test_config:
+  # one forecast needs (num_steps + offset + 1) x 6h = 8.5 days after its init. The first forecast
+  # starts one 6h window after start_date, so 18:00 of the previous day gives a 00 UTC init (input
+  # window [2023-06-01T00:00, 06:00), step 1 at 06:00). Only 00 UTC inits are scored by
+  # eval_gauges_daily.py
+  start_date: 2023-05-31T18:00
+  end_date: 2023-06-15T00:00
+  samples_per_mini_epoch: 1
+  forecast:
+    # trained with 8 steps (+6h..+48h); 32 steps roll out to 8 days to match the daily CHIRPS
+    # decoders. Steps beyond 8 are extrapolated. Merged with the inherited time_step and offset.
+    num_steps: 32
+  output:
+    num_samples: 1
+    # only write the precipitation stream; the model has many other target streams
+    streams: [ICON_DREAM_TP]
+
+data_loading:
+  # the sample count is rounded down to a multiple of batch_size * num_workers
+  num_workers: 1
+
+streams:
+  ICON_DREAM_TP:
+    type: offgrid
+    # reader type the stream was trained with; provides channels and normalization
+    base_type: icon_dream
+    offgrid:
+      # fixed points without targets (lat, lon per row)
+      coords: /e/project1/e-ext-2025e01-128/bender3/data/moz_stations/latlon.npy
+      # the stream's own cadence; set explicitly so that it doesn't follow time_window_step
+      frequency: 6h
+      # time_offset 0 (default): steps labelled 00/06/12/18 UTC, as in training

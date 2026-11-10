@@ -215,6 +215,11 @@ class DataReaderOffgrid(DataReaderTimestep):
         self.target_channels = self.reader.target_channels
         self.target_idx = self.reader.target_idx
 
+        # normalization statistics of the trained reader; the sampler also reads them to size the
+        # placeholder (spoof) data of windows without data
+        self.mean = self.reader.mean
+        self.stdev = self.reader.stdev
+
         # target channel weights
         self.target_channel_weights = self.reader.target_channel_weights
 

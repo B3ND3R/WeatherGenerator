@@ -116,6 +116,13 @@ def run_inference(args):
         traceback.print_exc()
         if cf.world_size == 1:
             pdb.post_mortem(tb)
+        else:
+            # with several ranks a normal return hangs in the shutdown of the dataloader workers
+            # and NCCL until the wall time; exit hard so this rank ends and the others see it is
+            # gone
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(1)
 
 
 def run_continue(args):
