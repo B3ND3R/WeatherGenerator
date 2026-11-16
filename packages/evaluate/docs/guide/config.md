@@ -1,74 +1,52 @@
 # Fast Evaluation Config Reference
 
-This document is the reference for all configuration options accepted by
-`uv run evaluate --config <your_config.yml>`.
+FInd all configuration options accepted by `uv run evaluate --config <your_config.yml>` below.
+A working template to copy and edit can be found in `config/eval_config.yml`.
 
-A working template to copy and edit is `config/eval_config.yml`
+<pre style="
+    max-width:100%;
+    overflow-x:auto;
+    white-space:pre-wrap;
+    word-break:break-word;
+    background-color: #F8F8F8;
+    padding-left:10px;
+    padding-right:10px">
 
----
+max_workers: ...          # optional top-level cap on parallelism 
+                          <a href="./config/top-level.md">Top-Level Keys</a>
 
-## Table of Contents
-
-1. [Overview: config layout](#1-overview-config-layout)
-2. [Top-level keys](#2-top-level-keys)
-3. [`global_plotting_options`](#3-global_plotting_options)
-4. [`evaluation`](#4-evaluation)
-5. [`default_streams`](#5-default_streams)
-6. [`run_ids`](#6-run_ids)
-   - [Common run keys](#61-common-run-keys)
-   - [Run types](#62-run-types)
-     - [Type: `zarr` (default)](#621-type-zarr-default)
-     - [Type: `json`](#622-type-json)
-     - [Type: `merge`](#623-type-merge)
-     - [Type: `jsonmerge`](#624-type-jsonmerge)
-     - [Type: `csv`](#625-type-csv)
-7. [Stream config block](#7-stream-config-block)
-   - [`evaluation` sub-block](#71-evaluation-sub-block)
-   - [`plotting` sub-block](#72-plotting-sub-block)
-   - [Regridding](#73-regridding)
-   - [Climatology](#74-climatology)
-8. [Metrics reference](#8-metrics-reference)
-   - [Special output metrics](#special-output-metrics-psd-qq_analysis-rank_histogram-and-seeps)
-9. [Regions reference](#9-regions-reference)
-10. [Score caching (JSON files)](#10-score-caching-json-files)
-11. [CSV format for pre-computed scores](#11-csv-format-for-pre-computed-scores)
-12. [CLI overrides](#12-cli-overrides)
-
----
-
-## 1. Overview: config layout
-
-```
-max_workers: ...                  # optional top-level cap on parallelism
-
-global_plotting_options:          # optional — applied to all runs/streams
+global_plotting_options:  # optional - applied to all runs/streams
+                          <a href="./config/global-plotting-options.md">Global Plotting Options</a>
   ...
 
-evaluation:                       # required — scoring and summary plot settings
-  metrics: [...]
-  regions: [...]
+evaluation:               # required - scoring and summary plot settings 
+                          <a href="./config/evaluation.md">Evaluation</a>
+  metrics: [...]          <a href="./config/metrics.md">Metrics Reference</a>
+  regions: [...]          <a href="./config/regions.md">Regions Reference</a>
   ...
 
-default_streams:                  # optional — stream config used when a run_id does not
-  ERA5:                           #   specify its own streams
+default_streams:          # optional - stream config used when
+                          # run_id does not specify its own streams
+                          <a href="./config/runs-and-streams.md">default_streams, run_ids, and stream blocks</a> 
+  ERA5:                  
     channels: [...]
     evaluation: ...
     plotting: ...
   CERRA:
     ...
 
-run_ids:                          # required — one entry per run to evaluate
+run_ids:                  # required - one entry per run to evaluate
   <run_id>:
     label: "..."
     results_base_dir: "..."
-    # streams:  optional; if absent, default_streams is used
+    # streams: optional; if absent, default_streams is used
   ...
-```
 
----
+</pre>
 
-## 2. Top-level keys
+Further configuration options:
 
+<<<<<<< HEAD
 | Key | Type | Optional | Default | Description |
 |-----|------|----------|---------|-------------|
 | `max_workers` | int | yes | — | Hard cap on parallel workers used for I/O, scoring, and plotting. Applied to all runs. Useful on shared nodes to avoid oversubscription. When absent, the number of workers is chosen automatically. |
@@ -898,3 +876,8 @@ Upload scores to MLFlow after evaluation:
 ```bash
 uv run evaluate --config myconfig.yml --push-metrics
 ```
+=======
+- [Score caching (JSON files)](config/score-caching.md)
+- [CSV format for pre-computed scores](config/csv-format.md)
+- [CLI overrides](config/cli-overrides.md)
+>>>>>>> develop
