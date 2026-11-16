@@ -41,7 +41,7 @@ global_plotting_options:
 evaluation:
   metrics: ["rmse", "mae"]
   score_plots: [metric_plots]
-  summary_dir: "./plots_offgrid_gauges/"
+  summary_dir: "/e/project1/e-ext-2025e01-128/bender3/plots_offgrid_gauges/"
   plot_ensemble: false
   plot_score_animations: false # broken on develop, see wegen_inference_and_eval.md section 15
   print_summary: true
@@ -54,18 +54,35 @@ default_streams:
       forecast_step: "all"
       sample: "all"
     plotting:
-      sample: [0]
+      # ~1 per month: global sample index of the 15th of each month (sample g = 2023-01-03 + g days;
+      # 703 = 2024-12-06, the last available day)
+      sample: [12, 43, 71, 102, 132, 163, 193, 224, 255, 285, 316, 346,
+               377, 408, 437, 468, 498, 529, 559, 590, 621, 651, 682, 703]
       forecast_step: "all"
+      # GIFs over forecast steps. The per-step map_*.png frames are still written (the GIFs are
+      # built from them); delete them afterwards if only the GIFs are wanted.
       data_plots:
         - maps:
-            predictions: [image]
-            target: [image]
-            bias: [image]
+            predictions: [video]
+            target: [video]
+            bias: [video]
 
 run_ids:
-  rtn01cow:
-    label: "zjk1udv3 CHIRPS"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/git/WeatherGenerator/results/rtn01cow
-  on3a1ebp:
-    label: 'ibpnc1py ERA5'
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/on3a1ebp
+  enb9q26a:
+    label: "542k raw (jzwtat5o)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/enb9q26a
+  gag9epf6:
+    label: "542k log (zjk1udv3)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/gag9epf6
+  t0sxatof:
+    label: "65k log (o3z4t233)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/t0sxatof
+  ugqx4rsw:
+    label: "65K raw (dmdh2cjg)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/ugqx4rsw
+  licms18z:
+    label: "65k log 6h (rhbjtrff)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/licms18z
+  xy4mtubg:
+    label: "65k raw 6h (cmru00dc)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/xy4mtubg
