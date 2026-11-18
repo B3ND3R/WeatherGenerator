@@ -61,10 +61,45 @@ default_streams:
       # # 703 = 2024-12-06, the last available day)
       # sample: [12, 43, 71, 102, 132, 163, 193, 224, 255, 285, 316, 346,
       #          377, 408, 437, 468, 498, 529, 559, 590, 621, 651, 682, 703]
-      # full2025 runs: the 15th of each month 2023-2025 (sample g = init 2022-12-23 + g days)
-      sample: [23, 54, 82, 113, 143, 174, 204, 235, 266, 296, 327, 357,
-               388, 419, 448, 479, 509, 540, 570, 601, 632, 662, 693, 723,
-               754, 785, 813, 844, 874, 905, 935, 966, 997, 1027, 1058, 1088]
+      # # full2025 runs: the 15th of each month 2023-2025 (sample g = init 2022-12-23 + g days)
+      # sample: [23, 54, 82, 113, 143, 174, 204, 235, 266, 296, 327, 357,
+      #          388, 419, 448, 479, 509, 540, 570, 601, 632, 662, 693, 723,
+      #          754, 785, 813, 844, 874, 905, 935, 966, 997, 1027, 1058, 1088]
+      # Case mode (full2025 runs only): plot the EWF extreme and normal cases of
+      # /e/home/jusers/bender3/jupiter/data/ewf/ewf_extreme_cases.csv and ewf_normal_cases.csv.
+      # Each sample is the forecast initialised the day before the case's start date, so forecast
+      # step 1 is the first day of the case and the whole event falls within the 10 steps.
+      # sample g = init 2022-12-23 + g days, i.e. g = (start - 1 day) - 2022-12-23. Cases outside
+      # the inits of the runs (0-1103) are left out: EXT01-07, NRM01-02 (2022) and EXT17-20,
+      # NRM19-20 (2026). EXT09 and NRM07 both start on 2023-02-25 and share sample 63.
+      sample:
+        # extreme
+        - 62   # EXT08 2023-02-24
+        - 63   # EXT09 2023-02-25 (also NRM07)
+        - 297  # EXT10 2023-10-17
+        - 358  # EXT11 2023-12-17
+        - 444  # EXT12 2024-03-12
+        - 456  # EXT13 2024-03-24
+        - 752  # EXT14 2025-01-14
+        - 777  # EXT15 2025-02-08
+        - 807  # EXT16 2025-03-10
+        # normal
+        - 25   # NRM03 2023-01-18
+        - 37   # NRM04 2023-01-30
+        - 45   # NRM05 2023-02-07
+        - 53   # NRM06 2023-02-15
+        # NRM07 2023-02-25 -> 63, listed above with EXT09
+        - 340  # NRM08 2023-11-29
+        - 410  # NRM09 2024-02-07
+        - 413  # NRM10 2024-02-10
+        - 448  # NRM11 2024-03-16
+        - 690  # NRM12 2024-11-13
+        - 709  # NRM13 2024-12-02
+        - 744  # NRM14 2025-01-06
+        - 759  # NRM15 2025-01-21
+        - 788  # NRM16 2025-02-19
+        - 795  # NRM17 2025-02-26
+        - 815  # NRM18 2025-03-18
       forecast_step: "all"
       # GIFs over forecast steps. The per-step map_*.png frames are still written (the GIFs are
       # built from them); delete them afterwards if only the GIFs are wanted.
