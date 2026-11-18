@@ -1017,6 +1017,7 @@ class Plotter:
             figsize = (16, 8)
 
         proj = ccrs.PlateCarree()
+        bbox = None
         if regionname:
             try:
                 # This uses the method already available in RegionBoundingBox
@@ -1101,6 +1102,18 @@ class Plotter:
             ax.add_collection(lc)
         else:
             ax.gridlines(draw_labels=False, linestyle="--", color="gray", linewidth=0.6, alpha=0.7)
+
+        # Fix the map extent to the region's bounding box so every map of a region shows the
+        # same area. Without this cartopy autoscales to the plotted points, which changes from
+        # map to map when NaN points (e.g. gauges without a reading) are dropped. Set after
+        # rendering so neither scatter autoscaling nor the datashader image extent overrides it.
+        if regionname == "global":
+            ax.set_global()
+        elif bbox is not None:
+            ax.set_extent(
+                [bbox.lon_min, bbox.lon_max, bbox.lat_min, bbox.lat_max],
+                crs=ccrs.PlateCarree(),
+            )
 
         cbar = plt.colorbar(
             mpl.cm.ScalarMappable(norm=opts["norm"], cmap=opts["cmap"]),

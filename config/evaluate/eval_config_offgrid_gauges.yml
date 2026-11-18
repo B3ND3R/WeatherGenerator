@@ -52,37 +52,67 @@ default_streams:
     channels: ["tp"]
     evaluation:
       forecast_step: "all"
-      sample: "all"
+      # sample: "all"
+      # full2025 runs: global sample g = init 2022-12-23 + g days; 0-8 are padding before 2023,
+      # 9-1103 = inits 2023-01-01 .. 2025-12-30 (last init; ERA5 input ends 2025-12-31)
+      sample: "9-1103"
     plotting:
-      # ~1 per month: global sample index of the 15th of each month (sample g = 2023-01-03 + g days;
-      # 703 = 2024-12-06, the last available day)
-      sample: [12, 43, 71, 102, 132, 163, 193, 224, 255, 285, 316, 346,
-               377, 408, 437, 468, 498, 529, 559, 590, 621, 651, 682, 703]
+      # # ~1 per month: global sample index of the 15th of each month (sample g = 2023-01-03 + g days;
+      # # 703 = 2024-12-06, the last available day)
+      # sample: [12, 43, 71, 102, 132, 163, 193, 224, 255, 285, 316, 346,
+      #          377, 408, 437, 468, 498, 529, 559, 590, 621, 651, 682, 703]
+      # full2025 runs: the 15th of each month 2023-2025 (sample g = init 2022-12-23 + g days)
+      sample: [23, 54, 82, 113, 143, 174, 204, 235, 266, 296, 327, 357,
+               388, 419, 448, 479, 509, 540, 570, 601, 632, 662, 693, 723,
+               754, 785, 813, 844, 874, 905, 935, 966, 997, 1027, 1058, 1088]
       forecast_step: "all"
       # GIFs over forecast steps. The per-step map_*.png frames are still written (the GIFs are
       # built from them); delete them afterwards if only the GIFs are wanted.
       data_plots:
         - maps:
-            predictions: [video]
-            target: [video]
-            bias: [video]
+            predictions: [image]
+            target: [image]
+            bias: [image]
 
 run_ids:
-  enb9q26a:
+  # full2025 runs (inits 2023-01-01 .. 2025-12-30, ERA5 input from the 3-hourly store)
+  turnqti3:
     label: "542k raw (jzwtat5o)"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/enb9q26a
-  gag9epf6:
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/turnqti3
+  icp0uqj9:
     label: "542k log (zjk1udv3)"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/gag9epf6
-  t0sxatof:
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/icp0uqj9
+  r2o3ypt0:
     label: "65k log (o3z4t233)"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/t0sxatof
-  ugqx4rsw:
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/r2o3ypt0
+  f7b8xw0o:
     label: "65K raw (dmdh2cjg)"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/ugqx4rsw
-  licms18z:
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/f7b8xw0o
+  x9ld7fu1:
     label: "65k log 6h (rhbjtrff)"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/licms18z
-  xy4mtubg:
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/x9ld7fu1
+  oi4r8tbk:
     label: "65k raw 6h (cmru00dc)"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/xy4mtubg
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/oi4r8tbk
+  drs6xaqz:
+    label: "log 6h (qsfrtgi3)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/drs6xaqz
+  # 2023-2024 runs (ERA5 to 2024)
+  # enb9q26a:
+  #   label: "542k raw (jzwtat5o)"
+  #   results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/enb9q26a
+  # gag9epf6:
+  #   label: "542k log (zjk1udv3)"
+  #   results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/gag9epf6
+  # t0sxatof:
+  #   label: "65k log (o3z4t233)"
+  #   results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/t0sxatof
+  # ugqx4rsw:
+  #   label: "65K raw (dmdh2cjg)"
+  #   results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/ugqx4rsw
+  # licms18z:
+  #   label: "65k log 6h (rhbjtrff)"
+  #   results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/licms18z
+  # xy4mtubg:
+  #   label: "65k raw 6h (cmru00dc)"
+  #   results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/xy4mtubg

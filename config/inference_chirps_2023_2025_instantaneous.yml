@@ -1,0 +1,35 @@
+# Inference overlay: CHIRPS decoders on emgqf93u (instantaneous ERA5 input at 18 UTC) over
+# 2023-2025, with the ERA5 input taken from the 3-hourly ERA5 store that runs to the end of 2025.
+# Runs: qsfrtgi3 / rhbjtrff (log1p), cmru00dc (no transform), checkpoint 2. Launch from
+# code/WeatherGenerator:
+#   ../WeatherGenerator-private/hpc/launch-slurm.py --stage inference --from-run-id cmru00dc --mini-epoch 2 \
+#     --nodes 2 --config config/inference_chirps_2023_2025_instantaneous.yml
+# The config is read in place (not copied): do not change it before the job has started.
+# Check before launching: scripts_vh/chirps/check_inference_range.py --run-id <run> --config <this file>
+#
+# Input: the 6-hourly subset of the 3-hourly store holds the same states as the hourly store the
+# models were trained on (...-1979-2024-1h-v2-with-era51, ends 2024-12-31); checked on 2023-06-02..05
+# with the real reader: identical except strd, now a 6 h instead of a 1 h accumulation (normalized
+# with the store's own statistics: 0.13 standard deviations rms difference, correlation 0.99).
+#
+# Samples: input days 2022-12-23 .. 2025-12-30 (1104 = 8 GPUs x 2 workers x 69, none dropped; the
+# first sample is one day after start_date). Their day-1 forecasts cover every day of 2023-2025;
+# 2025-12-31 cannot be an input day (no input on the store's last day). Ignore the input days
+# before 2022-12-31. ~5.5 h on 2 nodes, ~460 GB per run.
+
+streams:
+  ERA5_in:
+    filenames: ['aifs-ea-an-oper-0001-mars-n320-1979-2025-3h-v1-accumulations-6h.zarr']
+
+test_config:
+  start_date: 2022-12-22T00:00
+  end_date: 2026-01-15T00:00
+  samples_per_mini_epoch: 1104
+  shuffle: False
+  forecast:
+    num_steps: 10
+  output:
+    num_samples: 1104
+
+data_loading:
+  num_workers: 2

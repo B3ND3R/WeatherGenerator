@@ -1,0 +1,43 @@
+# Inference overlay: CHIRPS decoders on hoya9ez6 (ERA5 daily-mean input) over 2023-2025, with the
+# ERA5 input taken from the 3-hourly ERA5 store that runs to the end of 2025.
+# Runs: o3z4t233 (log1p), dmdh2cjg (no transform), checkpoint 2; the 542,080-point runs are left
+# out (no gain over 65,536). Launch from code/WeatherGenerator:
+#   ../WeatherGenerator-private/hpc/launch-slurm.py --stage inference --from-run-id o3z4t233 --mini-epoch 2 \
+#     --nodes 2 --config config/inference_chirps_2023_2025_daily_mean.yml
+# The config is read in place (not copied): do not change it before the job has started.
+# Check before launching: scripts_vh/chirps/check_inference_range.py --run-id <run> --config <this file>
+#
+# Input: the models were trained on the hourly store ...-1979-2024-1h-v2-with-era51 (ends 2024-12-31),
+# whose daily mean is the mean of the 24 hourly states 00..23, labelled 23:00. The 3-hourly store
+# gives the mean of the 8 states 00..21, labelled 21:00 (same 24 h window, so CHIRPS day D+1 stays
+# the first target). Checked on 2023-06-02..04 with the real reader: the normalized inputs differ
+# from the hourly store by a median of 0.03 standard deviations (w up to 0.16), strd (now a 6 h
+# accumulation, normalized with the store's own statistics) by 0.05. All 102 inputs are present.
+#
+# Samples: input days 2022-12-23 .. 2025-12-30 (1104 = 8 GPUs x 2 workers x 69, none dropped; the
+# first sample is one day after start_date). Their day-1 forecasts cover every day of 2023-2025;
+# 2025-12-31 cannot be an input day (no input on the store's last day). Ignore the input days
+# before 2022-12-31. ~5.5 h on 2 nodes, ~460 GB per run.
+
+streams:
+  ERA5_in:
+    filenames: ['aifs-ea-an-oper-0001-mars-n320-1979-2025-3h-v1-accumulations-6h.zarr']
+    anemoi_config:
+      dataset:
+        dataset: 'aifs-ea-an-oper-0001-mars-n320-1979-2025-3h-v1-accumulations-6h'
+        # 8 steps of 3 h (00..21), inclusive at both ends, labelled at the window's end
+        rolling_average: [-7, 0, "frequency"]
+      frequency: "24:00:00"
+
+test_config:
+  start_date: 2022-12-22T00:00
+  end_date: 2026-01-15T00:00
+  samples_per_mini_epoch: 1104
+  shuffle: False
+  forecast:
+    num_steps: 10
+  output:
+    num_samples: 1104
+
+data_loading:
+  num_workers: 2
