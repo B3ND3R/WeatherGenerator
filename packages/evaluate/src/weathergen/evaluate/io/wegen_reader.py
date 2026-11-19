@@ -18,7 +18,6 @@ from pathlib import Path
 import numpy as np
 import omegaconf as oc
 import xarray as xr
-from numpy.typing import NDArray
 
 # Local application / package
 from weathergen.common.config import (
@@ -411,7 +410,8 @@ class WeatherGenZarrReader(WeatherGenReader):
         """Data reader class for WeatherGenerator model outputs stored in Zarr format.
 
         Supports multi-rank inference outputs where each rank file contains a disjoint
-        subset of forecast initializations with overlapping local sample indices.
+        subset of forecast initializations with overlapping local sample indices. Global
+        sample indices follow the forecast dates (see ``_get_rank_sample_map``).
         """
         super().__init__(eval_cfg, run_id, private_paths)
 
@@ -428,7 +428,7 @@ class WeatherGenZarrReader(WeatherGenReader):
         self._cached_samples: set[int] | None = None
         self._cached_ensemble: dict[str, list[str]] = {}
         self._cached_is_gridded: dict[str, bool] = {}
-        self._rank_sample_map: dict[Path, tuple[list[int], int]] | None = None
+        self._rank_sample_map: dict[Path, list[tuple[int, int]]] | None = None
 
         # Raw I/O worker config (direct zarr access)
         self._max_workers: int | None = eval_cfg.get("max_workers")
@@ -524,36 +524,92 @@ class WeatherGenZarrReader(WeatherGenReader):
                 _logger.warning(f"Failed to open {rank_file.name} for metadata, trying next...")
         raise RuntimeError("No rank files could be opened for metadata queries.")
 
-    def _get_rank_sample_map(self) -> dict[Path, tuple[list[int], int]]:
-        """Build and cache mapping of rank_file → (local_samples, global_offset).
+    @staticmethod
+    def _sample_start(root, sample: str) -> np.datetime64 | None:
+        """Start of the source window of one local sample, or None if not stored.
 
-        Since all ranks use local indices (0, 1, ...), we assign global offsets:
-        rank0: offset=0, rank1: offset=len(rank0_samples), etc.
+        Read as in ``io_workers``: ``source_interval`` attrs of the target/prediction group of
+        the first stream/fstep, else the earliest ``{sample}/{stream}/0/source/times``.
+        """
+        grp = root[sample]
+        for stream in grp.group_keys():
+            sgrp = grp[stream]
+            for fstep in sgrp.group_keys():
+                for name in ("target", "prediction"):
+                    if name not in sgrp[fstep]:
+                        continue
+                    interval = sgrp[fstep][name].attrs.get("source_interval")
+                    if interval and interval.get("start"):
+                        return np.datetime64(interval["start"], "ns")
+            try:
+                times = np.asarray(sgrp["0/source/times"])
+                if times.size:
+                    return np.datetime64(np.min(times), "ns")
+            except KeyError:
+                pass
+        return None
+
+    def _get_rank_sample_map(self) -> dict[Path, list[tuple[int, int]]]:
+        """Build and cache mapping of rank_file → sorted [(global_sample, local_sample)].
+
+        Inference keys the samples of a rank by the order the batches arrive in, which is not
+        date order when the data loader has several workers (their batches interleave). So
+        global sample g is the g-th forecast by source-window start over all ranks: for
+        back-to-back windows g = (start - first start) / window step. If a sample has no start
+        stored, falls back to rank offsets: rank0 gets 0..N0-1, rank1 N0..N0+N1-1, etc.
         """
         if self._rank_sample_map is None:
 
-            def _local_samples(zarr_file: Path) -> list[int]:
+            def _local_starts(zarr_file: Path) -> list[tuple[int, np.datetime64 | None]]:
                 with zarrio_reader(zarr_file) as zio:
-                    return sorted(int(s) for s in zio.samples)
+                    root = zio.data_root
+                    return [(int(s), self._sample_start(root, s)) for s in root.group_keys()]
 
             # Opening a rank file is I/O bound, so open them on parallel threads.
             n_threads = min(32, len(self.rank_files))
             with ThreadPoolExecutor(max_workers=n_threads) as pool:
-                all_local = list(pool.map(_local_samples, self.rank_files))
+                all_local = list(pool.map(_local_starts, self.rank_files))
 
-            self._rank_sample_map = {}
-            offset = 0
-            for zarr_file, local in zip(self.rank_files, all_local, strict=True):
-                self._rank_sample_map[zarr_file] = (local, offset)
-                offset += len(local)
-            _logger.info(f"Indexed {offset} samples across {len(self.rank_files)} rank file(s).")
+            entries = [
+                (start, r, local)
+                for r, rank_local in enumerate(all_local)
+                for local, start in sorted(rank_local)
+            ]
+            if any(start is None for start, _, _ in entries):
+                _logger.warning(
+                    f"RUN {self.run_id}: some samples store no source window start; numbering "
+                    "samples by rank offset, which need not follow the forecast dates."
+                )
+                order = sorted(entries, key=lambda e: (e[1], e[2]))
+            else:
+                order = sorted(entries, key=lambda e: (e[0], e[1], e[2]))
+                n_dup = len(entries) - len({e[0] for e in entries})
+                if n_dup:
+                    _logger.warning(
+                        f"RUN {self.run_id}: {n_dup} samples share a source window start "
+                        "with another sample; ties are numbered in rank/local order."
+                    )
+
+            self._rank_sample_map = {f: [] for f in self.rank_files}
+            for g, (_, r, local) in enumerate(order):
+                self._rank_sample_map[self.rank_files[r]].append((g, local))
+            if order and order[0][0] is not None:
+                _logger.info(
+                    f"Indexed {len(order)} samples across {len(self.rank_files)} rank file(s) "
+                    f"by date: sample 0 starts {order[0][0]}, sample {len(order) - 1} starts "
+                    f"{order[-1][0]}."
+                )
+            else:
+                _logger.info(
+                    f"Indexed {len(order)} samples across {len(self.rank_files)} rank file(s)."
+                )
         return self._rank_sample_map
 
-    def _merge_fsteps(self, all_das: dict, global_sample_coords) -> dict:
+    def _merge_fsteps(self, all_das: dict) -> dict:
         """Merge lists of DataArrays for each forecast step across ranks.
 
         For gridded data (dims include 'sample'), concatenates along 'sample'
-        and re-indexes to global sample coordinates.
+        (already labelled with global samples per rank) and sorts by sample.
         For scatter data (no 'sample' dim), concatenates along 'ipoint'
         and promotes the scalar 'sample' coord to a per-ipoint coordinate
         so that downstream groupby("sample") works correctly.
@@ -573,28 +629,39 @@ class WeatherGenZarrReader(WeatherGenReader):
                 else das[0]
             )
 
-            combined = self._reindex_merged_coords(combined, concat_dim, global_sample_coords)
+            combined = self._reindex_merged_coords(combined, concat_dim)
             merged[fstep] = combined
         return merged
 
     @staticmethod
-    def _reindex_merged_coords(
-        da: xr.DataArray, concat_dim: str, global_sample_coords: NDArray
-    ) -> xr.DataArray:
+    def _reindex_merged_coords(da: xr.DataArray, concat_dim: str) -> xr.DataArray:
         """Re-index coordinates after cross-rank concatenation to avoid duplicates.
 
-        Each rank file uses local indices (0, 1, 2, …) for both samples and
-        ipoints.  After concatenation these overlap, so we replace them with
-        unique global coordinates:
-        - For gridded data (concat along 'sample'): assign contiguous global
-          sample indices derived from the rank offsets.
+        Each rank file uses local indices (0, 1, 2, …) for ipoints, which overlap
+        after concatenation:
+        - For gridded data (concat along 'sample'): the samples carry their global
+          labels (set per rank in ``get_data``); sort them into ascending order.
         - For scatter data (concat along 'ipoint'): assign a fresh 0-based
           ipoint range covering the combined length.
         """
         if "sample" in da.dims:
-            da = da.assign_coords(sample=global_sample_coords[: len(da.sample)])
+            da = da.sortby("sample")
         if concat_dim == "ipoint" and "ipoint" in da.dims:
             da = da.assign_coords(ipoint=np.arange(da.sizes["ipoint"]))
+        return da
+
+    @staticmethod
+    def _label_samples(da: xr.DataArray, labels: list[int]) -> xr.DataArray:
+        """Give gridded data of one rank its global sample labels (in load order).
+
+        Scatter data gets them from ``sample_labels`` of the IO state already.
+        """
+        if "sample" in da.dims:
+            if da.sizes["sample"] != len(labels):
+                raise ValueError(
+                    f"expected {len(labels)} samples from the rank, got {da.sizes['sample']}"
+                )
+            da = da.assign_coords(sample=labels)
         return da
 
     @staticmethod
@@ -648,18 +715,12 @@ class WeatherGenZarrReader(WeatherGenReader):
         ranks_loaded = 0
 
         for rank_file in self.rank_files:
-            local_samples, global_offset = rank_sample_map[rank_file]
-
-            # Check if any of this rank's global samples are requested
-            rank_globals = set(range(global_offset, global_offset + len(local_samples)))
-            if not rank_globals & requested_globals:
+            # (global, local) pairs of this rank that are requested, in global order
+            pairs = [(g, loc) for g, loc in rank_sample_map[rank_file] if g in requested_globals]
+            if not pairs:
                 continue
-
-            # Map requested global indices back to local indices for this rank
-            rank_local_to_load = [
-                local_samples[g - global_offset] for g in sorted(rank_globals & requested_globals)
-            ]
-            rank_global_labels = sorted(rank_globals & requested_globals)
+            rank_global_labels = [g for g, _ in pairs]
+            rank_local_to_load = [loc for _, loc in pairs]
 
             _logger.info(
                 f"RUN {self.run_id} [rank {rank_file.stem.split('rank')[-1]}]: "
@@ -668,7 +729,7 @@ class WeatherGenZarrReader(WeatherGenReader):
             _logger.debug(
                 f"RUN {self.run_id} [rank {rank_file.stem.split('rank')[-1]}]: "
                 f"local indices {rank_local_to_load}, "
-                f"global samples {sorted(rank_globals & requested_globals)}"
+                f"global samples {rank_global_labels}"
             )
 
             state = build_io_state(
@@ -692,21 +753,25 @@ class WeatherGenZarrReader(WeatherGenReader):
             result = get_data_fn(state)
 
             for fstep, da in result.target.items():
-                all_targets.setdefault(fstep, []).append(da)
+                all_targets.setdefault(fstep, []).append(
+                    self._label_samples(da, rank_global_labels)
+                )
             for fstep, da in result.prediction.items():
-                all_predictions.setdefault(fstep, []).append(da)
+                all_predictions.setdefault(fstep, []).append(
+                    self._label_samples(da, rank_global_labels)
+                )
             ranks_loaded += 1
 
         # Concatenate across ranks along sample dimension and re-index
-        global_sample_coords = np.array(sorted(requested_globals))
+        n_samples = len(requested_globals & self.get_samples())
 
-        merged_targets = self._merge_fsteps(all_targets, global_sample_coords)
-        merged_predictions = self._merge_fsteps(all_predictions, global_sample_coords)
+        merged_targets = self._merge_fsteps(all_targets)
+        merged_predictions = self._merge_fsteps(all_predictions)
 
         ranks_skipped = len(self.rank_files) - ranks_loaded
         _logger.info(
             f"RUN {self.run_id}: Multi-rank load complete. "
-            f"{len(global_sample_coords)} samples × {len(merged_targets)} fsteps "
+            f"{n_samples} samples × {len(merged_targets)} fsteps "
             f"(including sub-steps) "
             f"from {ranks_loaded}/{len(self.rank_files)} ranks "
             f"({ranks_skipped} skipped)."
@@ -725,14 +790,11 @@ class WeatherGenZarrReader(WeatherGenReader):
     def get_samples(self) -> set[int]:
         """Get global sample indices across all rank files.
 
-        Assigns contiguous global indices: rank0 gets 0..N0-1, rank1 gets N0..N0+N1-1, etc.
+        Contiguous 0..N-1 in order of the forecast dates (see ``_get_rank_sample_map``).
         """
         if self._cached_samples is None:
             rank_sample_map = self._get_rank_sample_map()
-            all_samples: set[int] = set()
-            for local_samples, offset in rank_sample_map.values():
-                all_samples.update(range(offset, offset + len(local_samples)))
-            self._cached_samples = all_samples
+            self._cached_samples = {g for pairs in rank_sample_map.values() for g, _ in pairs}
         return self._cached_samples
 
     def get_forecast_steps(self) -> set[int]:
