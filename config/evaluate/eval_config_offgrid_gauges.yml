@@ -27,21 +27,26 @@ global_plotting_options:
       colorbar_scale: "linear"
       vmin: -30.0
       vmax: 30.0
-      levels: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0] # mm/day
+      levels: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 40.0, 60.0, 80.0, 100.0] # mm/day
+      # one colour per bin: below the first level, between each pair, above the last
       colors:
         - "none" # < 0.1 mm/day: dry, drawn transparent
-        - "#BEDAE5BF"
-        - "#80B5CCBF"
-        - "#5691B3BF"
-        - "#4B6E9CBF"
-        - "#424B83BF"
-        - "#45596DBF"
-        - "#5B9E4CBF" # > 20 mm/day
+        - "#BEDAE5BF" # 0.1-0.5
+        - "#80B5CCBF" # 0.5-1
+        - "#5691B3BF" # 1-2
+        - "#4B6E9CBF" # 2-5
+        - "#424B83BF" # 5-10
+        - "#45596DBF" # 10-20
+        - "#5B9E4CBF" # 20-40
+        - "#D9C23FBF" # 40-60
+        - "#E8922EBF" # 60-80
+        - "#D2452DBF" # 80-100
+        - "#9C2A7ABF" # > 100 mm/day
 
 evaluation:
   metrics: ["rmse", "mae"]
   score_plots: [metric_plots]
-  summary_dir: "/e/project1/e-ext-2025e01-128/bender3/plots_offgrid_gauges/"
+  summary_dir: "/e/project1/e-ext-2025e01-128/bender3/plots_offgrid_gauges_3yr/"
   plot_ensemble: false
   plot_score_animations: false # broken on develop, see wegen_inference_and_eval.md section 15
   print_summary: true
@@ -114,24 +119,44 @@ run_ids:
   turnqti3:
     label: "542k raw (jzwtat5o)"
     results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/turnqti3
+  f7b8xw0o:
+    label: "65K raw (dmdh2cjg)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/f7b8xw0o
+  oi4r8tbk:
+    label: "65k raw 6h (cmru00dc)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/oi4r8tbk  
   icp0uqj9:
     label: "542k log (zjk1udv3)"
     results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/icp0uqj9
   r2o3ypt0:
     label: "65k log (o3z4t233)"
     results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/r2o3ypt0
-  f7b8xw0o:
-    label: "65K raw (dmdh2cjg)"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/f7b8xw0o
   x9ld7fu1:
     label: "65k log 6h (rhbjtrff)"
     results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/x9ld7fu1
-  oi4r8tbk:
-    label: "65k raw 6h (cmru00dc)"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/oi4r8tbk
-  drs6xaqz:
-    label: "log 6h (qsfrtgi3)"
-    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/drs6xaqz
+  # drs6xaqz: model qsfrtgi3 has the same training config as rhbjtrff (x9ld7fu1) but for run_id
+  # drs6xaqz:
+  #   label: "log 6h (qsfrtgi3)"
+  #   results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/drs6xaqz
+  # nearest-neighbour baselines in the same samples/steps as the full2025 runs
+  # (extreme-weather-forecasting/scripts/station_baseline_runs.py, template icp0uqj9)
+  ifs:
+    label: "IFS (NN)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/ifs
+    model_base_dir: /e/project1/e-ext-2025e01-128/bender3/models
+  aifs:
+    label: "AIFS (NN)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/aifs
+    model_base_dir: /e/project1/e-ext-2025e01-128/bender3/models
+  graphcast:
+    label: "GraphCast (NN)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/graphcast
+    model_base_dir: /e/project1/e-ext-2025e01-128/bender3/models
+  chirps:
+    # CHIRPS of the step's day at every lead time: an observed-product reference, not a forecast
+    label: "CHIRPS obs (NN)"
+    results_base_dir: /e/project1/e-ext-2025e01-128/bender3/results/chirps
+    model_base_dir: /e/project1/e-ext-2025e01-128/bender3/models
   # 2023-2024 runs (ERA5 to 2024)
   # enb9q26a:
   #   label: "542k raw (jzwtat5o)"
